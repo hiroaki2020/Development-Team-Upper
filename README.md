@@ -1,3 +1,3 @@
-Development-Team-Upper for Junior developers
+Development-Team-Upper (DTU)
 
-[![CircleCI](https://circleci.com/gh/hiroaki2020/DTUJ2/tree/main.svg?style=svg&circle-token=189a031814ea4aed26e14cf47672880fa91fe875)](https://circleci.com/gh/hiroaki2020/DTUJ2/tree/main)
+[![CircleCI](https://circleci.com/gh/hiroaki2020/Development-Team-Upper/tree/main.svg?style=svg&circle-token=b531db10c11efd6d2bc546a8c9b442dfbe7e1693)](https://circleci.com/gh/hiroaki2020/Development-Team-Upper/tree/main)
