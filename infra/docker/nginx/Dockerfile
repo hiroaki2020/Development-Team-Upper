@@ -1,9 +1,9 @@
-FROM node:16-alpine as node
-FROM nginx:1.20-alpine
-LABEL maintainer="ucan-lab <yes@u-can.pro>"
+FROM node:15.10.0-alpine3.13 as node
+FROM nginx:1.19.7-alpine
+LABEL maintainer="hiroaki"
 SHELL ["/bin/ash", "-oeux", "pipefail", "-c"]
 
-ENV TZ=UTC
+ENV TZ=Asia/Tokyo
 
 RUN apk update && \
   apk add --update --no-cache --virtual=.build-dependencies g++
@@ -15,6 +15,6 @@ COPY --from=node /usr/local/lib /usr/local/lib
 # yarn command
 COPY --from=node /opt /opt
 # nginx config file
-COPY ./infra/docker/nginx/*.conf /etc/nginx/conf.d/
+COPY ./infra/docker/nginx/*.conf.template /etc/nginx/templates/
 
 WORKDIR /work/backend
