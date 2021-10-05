@@ -65,8 +65,5 @@ jobs:
           name: test codes
           command: docker-compose exec app php artisan test
       - run:
-          name: just a check
-          command: docker-compose exec db mysql -u phper -psecret laravel_local -e 'select * from laravel_local.users\G;'
-      - run:
           name: stop containers
           command: docker-compose down
