@@ -498,5 +498,6 @@
     "Team Invitation": "チームへの招待",
     "Invalid data found.": "無効なデータを検出しました。",
     "Great! You have accepted the invitation to join the :team.": ":teamへの招待を承認しました。",
-    "Great! You have accepted :user's request.": ":userのリクエストを承認しました。"
+    "Great! You have accepted :user's request.": ":userのリクエストを承認しました。",
+    "This password reset link will expire in :count minutes.": "パスワードリセットのリンクは:count分間有効です。"
 }
