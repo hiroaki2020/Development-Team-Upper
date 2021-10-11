@@ -31,6 +31,12 @@ services:
       - php-fpm-socket:/var/run/php-fpm
     environment:
       - WEB_PORT=82
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+        compress: "true"
 
   db:
     build:

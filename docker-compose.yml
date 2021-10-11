@@ -29,6 +29,12 @@ services:
       - ./backend:/work/backend
     environment:
       - WEB_PORT=81
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+        compress: "true"
 
   db:
     build:
