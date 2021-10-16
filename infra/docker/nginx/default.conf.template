@@ -34,5 +34,9 @@ server {
         deny all;
     }
 
+    location ~ .*\.(html?|jpe?g|gif|png|css|js|ico)$ {
+        expires 30d;
+    }
+
     server_tokens off;
 }
