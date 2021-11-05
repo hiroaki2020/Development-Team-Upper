@@ -29,4 +29,14 @@ RUN apt-get update && \
 COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
 COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
 
+RUN addgroup --system --gid 555 dtuj
+RUN adduser --system --disabled-login --ingroup dtuj --no-create-home --home /nonexistent --gecos "dtuj" --shell /bin/false --uid 555 dtuj
+#RUN addgroup --system --gid 101 nginx
+#RUN adduser --system --disabled-login --ingroup nginx --no-create-home --home /var/cache/nginx --gecos "nginx" --shell /sbin/nologin --uid 101 --add_extra_groups dtuj nginx
+#RUN umask 0027
+
 WORKDIR /work/backend
+RUN chown dtuj:dtuj /work/backend
+RUN chmod 750 /work/backend
+#RUN chmod 777 /var/run/php-fpm
+USER dtuj

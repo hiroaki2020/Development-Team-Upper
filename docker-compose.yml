@@ -2,6 +2,9 @@ version: "3.8"
 volumes:
   php-fpm-socket:
   db-store:
+  web-rwdir-1:
+  web-rwdir-2:
+  web-rwdir-3:
 services:
   app:
     build:
@@ -23,18 +26,22 @@ services:
       context: .
       dockerfile: ./infra/docker/nginx/Dockerfile
     ports:
-      - ${WEB_PORT:-81}:81
+      - ${CONTAINER_WEB_PORT:-81}:8081
     volumes:
       - php-fpm-socket:/var/run/php-fpm
-      - ./backend:/work/backend
+      - ./backend:/work/backend:ro
+      - web-rwdir-1:/var/cache/nginx
+      - web-rwdir-2:/etc/nginx
+      - web-rwdir-3:/tmp
     environment:
-      - WEB_PORT=81
+      - WEB_PORT=8081
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
         compress: "true"
+    read_only: false
 
   db:
     build:
