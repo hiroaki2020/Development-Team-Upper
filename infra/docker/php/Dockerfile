@@ -32,7 +32,7 @@ COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
 RUN addgroup --system --gid 555 dtuj
 RUN adduser --system --disabled-login --ingroup dtuj --no-create-home --home /nonexistent --gecos dtuj --shell /bin/false --uid 555 dtuj
 RUN addgroup --system --gid 102 nginx
-RUN adduser --system --disabled-login --ingroup nginx --no-create-home --home /var/cache/nginx --gecos nginx --shell /sbin/nologin --uid 101 nginx
+RUN adduser --system --disabled-login --ingroup nginx --no-create-home --home /var/cache/nginx --gecos nginx --shell /sbin/nologin --uid 102 nginx
 RUN addgroup nginx dtuj
 RUN umask 0027
 
