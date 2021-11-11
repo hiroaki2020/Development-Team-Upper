@@ -12,7 +12,7 @@ services:
       dockerfile: ./infra/docker/php/Dockerfile
     volumes:
       - php-fpm-socket:/var/run/php-fpm
-      - ./backend:/work/backend
+      - ./backend:/work/backend:ro
     environment:
       - DB_CONNECTION=mysql
       - DB_HOST=db
@@ -20,6 +20,7 @@ services:
       - DB_DATABASE=${DB_NAME:-laravel_local}
       - DB_USERNAME=${DB_USER:-phper}
       - DB_PASSWORD=${DB_PASS:-secret}
+    read_only: true
 
   web:
     build:
@@ -28,7 +29,7 @@ services:
     ports:
       - ${CONTAINER_WEB_PORT:-81}:8081
     volumes:
-      - php-fpm-socket:/var/run/php-fpm
+      - php-fpm-socket:/var/run/php-fpm:ro
       - ./backend:/work/backend:ro
       - web-rwdir-1:/var/cache/nginx
       - web-rwdir-2:/etc/nginx
@@ -41,7 +42,7 @@ services:
         max-size: "20m"
         max-file: "5"
         compress: "true"
-    read_only: false
+    read_only: true
 
   db:
     build:
