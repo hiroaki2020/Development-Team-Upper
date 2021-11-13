@@ -37,5 +37,8 @@ RUN addgroup nginx dtuj
 RUN umask 0027
 
 WORKDIR /work/backend
-RUN chown dtuj:root /var/run/php-fpm
+RUN chown dtuj:dtuj /var/run/php-fpm
+RUN chmod 750 /var/run/php-fpm
+RUN chown dtuj:root /work
+RUN chmod 500 /work
 USER dtuj

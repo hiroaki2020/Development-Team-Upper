@@ -25,5 +25,7 @@ COPY --from=node /opt /opt
 # nginx config file
 COPY ./infra/docker/nginx/*.conf.template /etc/nginx/templates/
 
-USER nginx
 WORKDIR /work/backend
+RUN chown nginx:root /work
+RUN chmod 500 /work
+USER nginx
