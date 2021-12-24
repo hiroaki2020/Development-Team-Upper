@@ -29,16 +29,20 @@ RUN apt-get update && \
 COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
 COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
 
-RUN addgroup --system --gid 555 dtuj
-RUN adduser --system --disabled-login --ingroup dtuj --no-create-home --home /nonexistent --gecos dtuj --shell /bin/false --uid 555 dtuj
-RUN addgroup --system --gid 102 nginx
-RUN adduser --system --disabled-login --ingroup nginx --no-create-home --home /var/cache/nginx --gecos nginx --shell /sbin/nologin --uid 102 nginx
-RUN addgroup nginx dtuj
-RUN umask 0027
+RUN addgroup --system --gid 555 dtuj && \
+  adduser --system --disabled-login --ingroup dtuj --no-create-home --home /nonexistent --gecos dtuj --shell /bin/false --uid 555 dtuj && \
+  addgroup --system --gid 102 nginx && \
+  adduser --system --disabled-login --ingroup nginx --no-create-home --home /var/cache/nginx --gecos nginx --shell /sbin/nologin --uid 102 nginx && \
+  addgroup nginx dtuj && \
+  delgroup sudo && \
+  addgroup --system --gid 27 mysql && \
+  adduser --system --disabled-login --ingroup mysql --home /var/lib/mysql --gecos 'MySQL Server' --shell /bin/false --uid 27 mysql && \
+  adduser dtuj mysql && \
+  umask 0027
 
 WORKDIR /work/backend
-RUN chown dtuj:dtuj /var/run/php-fpm
-RUN chmod 750 /var/run/php-fpm
-RUN chown dtuj:root /work
-RUN chmod 500 /work
+RUN chown dtuj:dtuj /var/run/php-fpm && \
+  chmod 750 /var/run/php-fpm && \
+  chown dtuj:root /work && \
+  chmod 500 /work
 USER dtuj
