@@ -3,15 +3,7 @@ LABEL maintainer="hiroaki"
 
 ENV TZ=Asia/Tokyo
 
-COPY ./infra/docker/mysql/my.cnf /etc/my.cnf
-COPY ./infra/docker/mysql/docker-entrypoint-wrapper.sh /entrypoint-wrapper.sh
-COPY ./infra/docker/mysql/logrotate.conf /etc/logrotate.conf
-COPY ./infra/docker/mysql/0hourly /etc/cron.d/0hourly
-COPY ./infra/docker/mysql/dailyjobs /etc/cron.d/dailyjobs
-COPY ./infra/docker/mysql/cron.allow /etc/cron.allow
-COPY ./infra/docker/mysql/change-socket-permission.sh /change-socket-permission.sh
-
-RUN microdnf -y update && \
+RUN microdnf update && \
   rm -rf /var/cache/yum && \
   microdnf -y install cronie-noanacron logrotate && \
   microdnf clean all && \
@@ -28,6 +20,14 @@ RUN microdnf -y update && \
   useradd --system -g dtuj --groups mysql --no-create-home --home-dir /nonexistent --comment dtuj --shell /bin/false --uid 555 dtuj && \
   setcap cap_setuid,cap_setgid,cap_dac_override+ep /usr/sbin/crond && \
   chmod 000 /usr/bin/crontab /usr/bin/cronnext /var/spool/cron
+
+COPY ./infra/docker/mysql/my.cnf /etc/my.cnf
+COPY ./infra/docker/mysql/docker-entrypoint-wrapper.sh /entrypoint-wrapper.sh
+COPY ./infra/docker/mysql/logrotate.conf /etc/logrotate.conf
+COPY ./infra/docker/mysql/0hourly /etc/cron.d/0hourly
+COPY ./infra/docker/mysql/dailyjobs /etc/cron.d/dailyjobs
+COPY ./infra/docker/mysql/cron.allow /etc/cron.allow
+COPY ./infra/docker/mysql/change-socket-permission.sh /change-socket-permission.sh
 
 ENTRYPOINT ["/entrypoint-wrapper.sh"]
 # You can replace "mysqld" below in the CMD instruction with "mysqld" command options or simply add them after "mysqld".

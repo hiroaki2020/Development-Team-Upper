@@ -3,18 +3,19 @@ FROM nginxinc/nginx-unprivileged:1.19.7-alpine
 LABEL maintainer="hiroaki"
 SHELL ["/bin/ash", "-oeux", "pipefail", "-c"]
 
-USER root
 ENV TZ=Asia/Tokyo
 
-RUN apk update && \
-    apk add --update --no-cache --virtual=.build-dependencies g++ && \
+RUN apk add --update-cache --no-cache --virtual .build-dependencies g++ && \
     deluser nginx && \
     addgroup --system -g 102 nginx && \
     adduser -S -D -G nginx -H -h /var/cache/nginx -g nginx -s /sbin/nologin -u 102 nginx && \
     find /. -user 101 -print0 | xargs -0 chown -h nginx && \
     addgroup --system -g 555 dtuj && \
     adduser -S -D -G dtuj -H -h /nonexistent -g dtuj -s /bin/false -u 555 dtuj && \
-    addgroup nginx dtuj
+    addgroup nginx dtuj && \
+    mkdir /work && \
+    chown nginx:root /work && \
+    chmod 500 /work
 
 # node command
 COPY --from=node /usr/local/bin /usr/local/bin
@@ -26,6 +27,4 @@ COPY --from=node /opt /opt
 COPY ./infra/docker/nginx/*.conf.template /etc/nginx/templates/
 
 WORKDIR /work/backend
-RUN chown nginx:root /work
-RUN chmod 500 /work
 USER nginx

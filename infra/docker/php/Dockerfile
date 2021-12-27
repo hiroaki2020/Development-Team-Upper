@@ -24,12 +24,8 @@ RUN apt-get update && \
   docker-php-ext-configure gd --with-freetype --with-jpeg && \
   docker-php-ext-install intl pdo_mysql zip bcmath gd exif && \
   composer config -g process-timeout 3600 && \
-  composer config -g repos.packagist composer https://packagist.org
-
-COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
-COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
-
-RUN addgroup --system --gid 555 dtuj && \
+  composer config -g repos.packagist composer https://packagist.org && \
+  addgroup --system --gid 555 dtuj && \
   adduser --system --disabled-login --ingroup dtuj --no-create-home --home /nonexistent --gecos dtuj --shell /bin/false --uid 555 dtuj && \
   addgroup --system --gid 102 nginx && \
   adduser --system --disabled-login --ingroup nginx --no-create-home --home /var/cache/nginx --gecos nginx --shell /sbin/nologin --uid 102 nginx && \
@@ -38,11 +34,15 @@ RUN addgroup --system --gid 555 dtuj && \
   addgroup --system --gid 27 mysql && \
   adduser --system --disabled-login --ingroup mysql --home /var/lib/mysql --gecos 'MySQL Server' --shell /bin/false --uid 27 mysql && \
   adduser dtuj mysql && \
-  umask 0027
-
-WORKDIR /work/backend
-RUN chown dtuj:dtuj /var/run/php-fpm && \
+  umask 0027 && \
+  chown dtuj:dtuj /var/run/php-fpm && \
   chmod 750 /var/run/php-fpm && \
+  mkdir /work && \
   chown dtuj:root /work && \
   chmod 500 /work
+
+COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
+COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
+
+WORKDIR /work/backend
 USER dtuj
