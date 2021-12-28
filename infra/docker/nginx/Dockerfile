@@ -3,6 +3,7 @@ FROM nginxinc/nginx-unprivileged:1.19.7-alpine
 LABEL maintainer="hiroaki"
 SHELL ["/bin/ash", "-oeux", "pipefail", "-c"]
 
+USER root
 ENV TZ=Asia/Tokyo
 
 RUN apk add --update-cache --no-cache --virtual .build-dependencies g++ && \

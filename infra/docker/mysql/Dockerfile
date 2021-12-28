@@ -11,9 +11,6 @@ RUN microdnf update && \
   touch /var/log/mysql/general.log /var/log/mysql/slow-query.log && \
   chown -R mysql:mysql /var/log/mysql /run/mysql-socket && \
   chmod -R u=rwX,g=rX,o= /var/log/mysql && \
-  chmod 750 /run/mysql-socket /entrypoint-wrapper.sh /entrypoint.sh /change-socket-permission.sh && \
-  chmod 644 /etc/my.cnf /etc/logrotate.conf /etc/cron.d/0hourly /etc/cron.d/dailyjobs /etc/cron.allow && \
-  chown mysql:mysql /entrypoint-wrapper.sh /entrypoint.sh /change-socket-permission.sh /run /var/log && \
   # Uncomment the line below only if you allow container user (=mysql) to install packages via microdnf command.
   #chown mysql:mysql /var/cache/yum /var/cache/yum/lock && \
   groupadd --system --gid 555 dtuj && \
@@ -28,6 +25,10 @@ COPY ./infra/docker/mysql/0hourly /etc/cron.d/0hourly
 COPY ./infra/docker/mysql/dailyjobs /etc/cron.d/dailyjobs
 COPY ./infra/docker/mysql/cron.allow /etc/cron.allow
 COPY ./infra/docker/mysql/change-socket-permission.sh /change-socket-permission.sh
+
+RUN chmod 750 /run/mysql-socket /entrypoint-wrapper.sh /entrypoint.sh /change-socket-permission.sh && \
+  chmod 644 /etc/my.cnf /etc/logrotate.conf /etc/cron.d/0hourly /etc/cron.d/dailyjobs /etc/cron.allow && \
+  chown mysql:mysql /entrypoint-wrapper.sh /entrypoint.sh /change-socket-permission.sh /run /var/log
 
 ENTRYPOINT ["/entrypoint-wrapper.sh"]
 # You can replace "mysqld" below in the CMD instruction with "mysqld" command options or simply add them after "mysqld".
