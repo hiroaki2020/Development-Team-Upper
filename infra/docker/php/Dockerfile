@@ -35,7 +35,7 @@ RUN apt-get update && \
   adduser --system --disabled-login --ingroup mysql --home /var/lib/mysql --gecos 'MySQL Server' --shell /bin/false --uid 27 mysql && \
   adduser dtuj mysql && \
   umask 0027 && \
-  chown dtuj:dtuj /var/run/php-fpm /composer/config.json /composer/auth.json && \
+  chown dtuj:dtuj /var/run/php-fpm /composer/config.json /composer/auth.json /composer/cache && \
   chmod 750 /var/run/php-fpm && \
   mkdir /work && \
   chown dtuj:root /work && \

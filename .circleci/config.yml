@@ -66,6 +66,9 @@ jobs:
           name: copy data from host to container
           command: docker cp ./backend/. dtuj_circleci_app_1:/work/backend
       - run:
+          name: just a test
+          command: docker-compose exec app ls -al /work/backend
+      - run:
           name: install composer
           command: docker-compose exec app composer install
       - run:
