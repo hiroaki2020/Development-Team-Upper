@@ -13,8 +13,9 @@ jobs:
           name: change docker and docker-compose commands' permissions if circleci runs locally
           command: |
             if [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
-              sudo chmod u+s /usr/bin/docker
-              sudo chmod u+s /usr/local/bin/docker-compose
+              sudo usermod -aG docker circleci
+              #sudo chmod u+s /usr/bin/docker
+              #sudo chmod u+s /usr/local/bin/docker-compose
               # consider 2 lines above can be replaced by adding user to docker group
             fi
       - run:
