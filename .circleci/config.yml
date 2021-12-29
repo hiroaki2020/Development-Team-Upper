@@ -15,7 +15,13 @@ jobs:
             if [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
               sudo chmod u+s /usr/bin/docker
               sudo chmod u+s /usr/local/bin/docker-compose
+              # consider 2 lines above can be replaced by adding user to docker group
             fi
+      - run:
+          name: create .env and set env variables
+          command: |
+            echo 'DTUJ_IMAGE_NAME_PREFIX="dtuj_circleci"' > ./.env
+            echo 'COMPOSE_PROJECT_NAME="dtuj_circleci"' >> ./.env
       - restore_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/change-socket-permission.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
       - run:
@@ -36,10 +42,7 @@ jobs:
             - ./circleci-cache/docker-images.tar
       - run:
           name: spin up containers
-          command: |
-            export CIRCLECI_IMAGE_NAME="_circleci"
-            export COMPOSE_PROJECT_NAME="dtuj_circleci"
-            docker-compose up -d
+          command: docker-compose up -d
       - run:
           name: wait until db container is ready
           command: | 
