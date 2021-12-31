@@ -65,8 +65,8 @@ jobs:
       - run:
           name: chown copied dir to dtuj
           command: |
-            groupadd --system --gid 555 dtuj
-            useradd --system -g dtuj --no-create-home --home-dir /nonexistent --comment dtuj --shell /bin/false --uid 555 dtuj
+            sudo groupadd --system --gid 555 dtuj
+            sudo useradd --system -g dtuj --no-create-home --home-dir /nonexistent --comment dtuj --shell /bin/false --uid 555 dtuj
             sudo chown dtuj:dtuj ./backend
       - run:
           name: copy data from host to container
