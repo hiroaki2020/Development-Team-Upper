@@ -63,11 +63,11 @@ jobs:
           name: create .env.testing file for testing codes
           command: echo "APP_KEY=" > ./backend/.env.testing
       - run:
-          name: copy data from host to container
-          command: docker cp ./backend/. dtuj_circleci_app_1:/work/backend
-      - run:
           name: chown copied dir
-          command: sudo docker-compose exec app chown dtuj:dtuj /work/backend
+          command: sudo chown 555:555 ./backend
+      - run:
+          name: copy data from host to container
+          command: docker cp -a ./backend/. dtuj_circleci_app_1:/work/backend
       - run:
           name: just a test
           command: docker-compose exec app ls -al /work/backend
