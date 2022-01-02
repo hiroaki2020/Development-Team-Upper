@@ -31,10 +31,10 @@ jobs:
             if [[ -f ./circleci-cache/docker-images.tar ]]; then
               docker load -i ./circleci-cache/docker-images.tar
             elif [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
-              sed -i -e '/"#COPY ./backend /work/backend"/s/^#//' infra/docker/php/Dockerfile
+              sed -i -e '/"#COPY\ ./backend\ /work/backend"/s/^#//' infra/docker/php/Dockerfile
               docker-compose build --no-cache --force-rm
             else
-              sed -i -e '/"#COPY ./backend /work/backend"/s/^#//' infra/docker/php/Dockerfile
+              sed -i -e '/"#COPY\ ./backend\ /work/backend"/s/^#//' infra/docker/php/Dockerfile
               docker-compose build --no-cache
               mkdir circleci-cache
               docker save -o ./circleci-cache/docker-images.tar dtuj_circleci_app dtuj_circleci_web dtuj_circleci_db
