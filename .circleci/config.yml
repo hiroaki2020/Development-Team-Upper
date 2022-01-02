@@ -68,6 +68,8 @@ jobs:
             sudo groupadd --system --gid 555 dtuj
             sudo useradd --system -g dtuj --no-create-home --home-dir /nonexistent --comment dtuj --shell /bin/false --uid 555 dtuj
             sudo chown dtuj:dtuj ./backend
+            sleep 10
+            cat /etc/passwd
       - run:
           name: copy data from host to container
           command: docker cp -a ./backend/. dtuj_circleci_app_1:/work/backend
