@@ -41,6 +41,8 @@ RUN apt-get update && \
 
 COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
 COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
+# Uncomment the line below in circleci env
+#COPY ./backend /work/backend
 
 WORKDIR /work/backend
 USER dtuj
