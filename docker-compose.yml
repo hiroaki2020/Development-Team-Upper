@@ -26,11 +26,10 @@ services:
       - mysql-socket:/run/mysql
     environment:
       - DB_CONNECTION=mysql
-      #- DB_HOST=db
-      #- DB_PORT=3307
       - DB_DATABASE=${DB_NAME:-laravel_local}
       - DB_USERNAME=${DB_USER:-phper}
       - DB_PASSWORD=${DB_PASS:-secret}
+      - LOG_REQUESTS=true
     logging:
       driver: "json-file"
       options:

@@ -9,7 +9,6 @@ ENV TZ=Asia/Tokyo \
   LANGUAGE=ja_JP:ja \
   LC_ALL=ja_JP.UTF-8 \
   # composer environment
-  #COMPOSER_ALLOW_SUPERUSER=1 \
   COMPOSER_HOME=/composer
 
 COPY --from=composer:2.0.11 /usr/bin/composer /usr/bin/composer
