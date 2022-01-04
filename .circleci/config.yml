@@ -32,11 +32,9 @@ jobs:
               docker load -i ./circleci-cache/docker-images.tar
             elif [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
               sed -i -e '/#COPY .\/backend \/work\/backend/s/^#//' infra/docker/php/Dockerfile
-              cat infra/docker/php/Dockerfile > /tmp/test.txt
               docker-compose build --no-cache --force-rm
             else
               sed -i -e '/#COPY .\/backend \/work\/backend/s/^#//' infra/docker/php/Dockerfile
-              cat infra/docker/php/Dockerfile > /tmp/test.txt
               docker-compose build --no-cache
               mkdir circleci-cache
               docker save -o ./circleci-cache/docker-images.tar dtuj_circleci_app dtuj_circleci_web dtuj_circleci_db
@@ -77,7 +75,9 @@ jobs:
         #  command: docker cp ./backend/. dtuj_circleci_app_1:/work/backend
       - run:
           name: just a test
-          command: docker-compose exec app ls -al /work/backend
+          command: |
+            docker-compose exec app ls -al /work/backend
+            docker-compose exec app cat infra/docker/php/php-fpm.d/zzz-www.conf
       - run:
           name: install composer
           command: docker-compose exec app composer install
