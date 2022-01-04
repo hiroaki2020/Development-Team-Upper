@@ -2,6 +2,7 @@ version: "3.8"
 volumes:
   php-fpm-socket:
   app-rwdir-1:
+  app-rwdir-2:
   web-rwdir-1:
   web-rwdir-2:
   web-rwdir-3:
@@ -21,6 +22,7 @@ services:
       - php-fpm-socket:/run/php-fpm
       - ./backend:/work/backend
       - app-rwdir-1:/tmp
+      - app-rwdir-2:/composer
       - mysql-socket:/run/mysql
     environment:
       - DB_CONNECTION=mysql
