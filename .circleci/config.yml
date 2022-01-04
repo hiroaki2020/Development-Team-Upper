@@ -77,7 +77,7 @@ jobs:
           name: just a test
           command: |
             docker-compose exec app ls -al /work/backend
-            docker-compose exec app cat infra/docker/php/php-fpm.d/zzz-www.conf
+            docker-compose exec app cat /usr/local/etc/php-fpm.d/zzz-www.conf
       - run:
           name: install composer
           command: docker-compose exec app composer install
