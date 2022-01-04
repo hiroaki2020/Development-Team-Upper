@@ -37,7 +37,7 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['single'],
+            'channels' => ['stderr'],
             'ignore_exceptions' => false,
         ],
 
@@ -75,10 +75,10 @@ return [
         'stderr' => [
             'driver' => 'monolog',
             'handler' => StreamHandler::class,
-            'formatter' => env('LOG_STDERR_FORMATTER'),
             'with' => [
                 'stream' => 'php://stderr',
             ],
+            'level' => env('LOG_LEVEL', 'debug'),
         ],
 
         'syslog' => [
@@ -101,4 +101,5 @@ return [
         ],
     ],
 
+    'requests' => env('LOG_REQUESTS', false),
 ];

@@ -13,46 +13,63 @@ jobs:
           name: change docker and docker-compose commands' permissions if circleci runs locally
           command: |
             if [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
-              sudo chmod u+s /usr/bin/docker
-              sudo chmod u+s /usr/local/bin/docker-compose
+              sudo usermod -aG docker circleci
+              #sudo chmod u+s /usr/bin/docker
+              #sudo chmod u+s /usr/local/bin/docker-compose
+              # consider 2 lines above can be replaced by adding user to docker group
             fi
+      - run:
+          name: create .env and set env variables
+          command: |
+            echo 'DTUJ_IMAGE_NAME_PREFIX="dtuj_circleci"' > ./.env
+            echo 'COMPOSE_PROJECT_NAME="dtuj_circleci"' >> ./.env
+            echo 'APP_KEY=' > ./backend/.env
+            echo 'APP_ENV=testing' >> ./backend/.env
       - restore_cache:
-          key: v1-docker-images-{{ checksum "docker-compose.circleci.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/change-socket-permission.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
       - run:
           name: load images from cache if it exists, build ones if not
           command: | 
             if [[ -f ./circleci-cache/docker-images.tar ]]; then
               docker load -i ./circleci-cache/docker-images.tar
             elif [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
-              docker-compose -f docker-compose.circleci.yml build
+              docker-compose build --no-cache --force-rm
             else
-              docker-compose -f docker-compose.circleci.yml build --no-cache
+              docker-compose build --no-cache
               mkdir circleci-cache
               docker save -o ./circleci-cache/docker-images.tar dtuj_circleci_app dtuj_circleci_web dtuj_circleci_db
             fi
       - save_cache:
-          key: v1-docker-images-{{ checksum "docker-compose.circleci.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/change-socket-permission.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
           paths:
             - ./circleci-cache/docker-images.tar
       - run:
           name: spin up containers
-          command: docker-compose -f docker-compose.circleci.yml up -d
-      - run:
-          name: create .env.testing file for testing codes
-          command: echo "APP_KEY=" > ./backend/.env.testing
-      - run:
-          name: copy data from host to container
-          command: docker cp ./backend/. app:/work/backend
-      - run:
-          name: install composer
-          command: docker-compose exec app composer install
+          command: docker-compose up -d
       - run:
           name: wait until db container is ready
           command: | 
-            until docker-compose exec db mysqladmin -u phper -h db -psecret -s ping
+            until docker-compose exec db mysqladmin -s ping
             do
               sleep 1
             done
+            while docker-compose exec db mysqladmin -s ping
+            do
+              sleep 1
+            done
+            until docker-compose exec db mysqladmin -s ping
+            do
+              sleep 1
+            done
+      - run:
+          name: copy data from host to container
+          command: docker cp ./backend/. dtuj_circleci_app_1:/work/backend
+      - run:
+          name: chown backend dir
+          command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
+      - run:
+          name: install composer
+          command: docker-compose exec app composer install --no-scripts --no-plugins
       - run:
           name: test migration
           command: docker-compose exec app php artisan migrate

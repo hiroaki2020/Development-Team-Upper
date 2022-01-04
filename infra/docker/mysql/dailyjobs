@@ -1,0 +1,8 @@
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
+
+# Run the daily, weekly, and monthly jobs if cronie-anacron is not installed
+00 0 * * * root [ ! -f /etc/cron.hourly/0anacron ] && run-parts /etc/cron.daily
+00 0 * * 1 root [ ! -f /etc/cron.hourly/0anacron ] && run-parts /etc/cron.weekly
+00 0 1 * * root [ ! -f /etc/cron.hourly/0anacron ] && run-parts /etc/cron.monthly
