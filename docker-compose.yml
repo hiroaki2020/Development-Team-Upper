@@ -66,8 +66,6 @@ services:
       context: .
       dockerfile: ./infra/docker/mysql/Dockerfile
     image: "${DTUJ_IMAGE_NAME_PREFIX-dtuj}_db"
-    #ports:
-      #- ${DB_PORT:-3307}:3307
     volumes:
       - db-store:/var/lib/mysql
       - mysql-socket:/run/mysql-socket
@@ -80,7 +78,6 @@ services:
       - MYSQL_USER=${DB_USER:-phper}
       - MYSQL_PASSWORD=${DB_PASS:-secret}
       - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASS:-secret}
-      #- MYSQL_TCP_PORT=3307
     logging:
       driver: "json-file"
       options:
