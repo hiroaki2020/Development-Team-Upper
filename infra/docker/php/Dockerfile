@@ -33,16 +33,14 @@ RUN apt-get update && \
   adduser --system --disabled-login --ingroup mysql --home /var/lib/mysql --gecos 'MySQL Server' --shell /bin/false --uid 27 mysql && \
   adduser dtuj mysql && \
   umask 0027 && \
-  mkdir /work /composer && \
+  mkdir -p /work/backend /composer && \
   chown dtuj:dtuj /var/run/php-fpm /composer && \
   chmod 750 /var/run/php-fpm && \
-  chown dtuj:root /work && \
+  chown dtuj:root /work /work/backend && \
   chmod 500 /work
 
 COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
 COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
-# Uncomment the line below in circleci env
-#COPY ./backend /work/backend
 
 WORKDIR /work/backend
 USER dtuj
