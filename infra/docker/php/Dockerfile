@@ -34,9 +34,8 @@ RUN apt-get update && \
   adduser dtuj mysql && \
   umask 0027 && \
   mkdir -p /work/backend /composer && \
-  chown dtuj:dtuj /var/run/php-fpm /composer && \
+  chown dtuj:dtuj /var/run/php-fpm /composer /work && \
   chmod 750 /var/run/php-fpm && \
-  chown dtuj:root /work /work/backend && \
   chmod 500 /work
 
 COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
