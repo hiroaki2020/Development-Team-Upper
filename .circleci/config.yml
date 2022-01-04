@@ -70,7 +70,10 @@ jobs:
            # sudo chown dtuj:dtuj ./backend
       - run:
           name: copy data from host to container
-          command: docker cp ./backend/* dtuj_circleci_app_1:/work/backend/
+          command: docker cp ./backend/. dtuj_circleci_app_1:/work/backend
+      - run:
+          name: chown backend dir
+          command: docker-compose exec --user root app chown dtuj:dtuj /work/backend
       - run:
           name: just a test
           command: |
