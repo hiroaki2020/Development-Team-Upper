@@ -69,9 +69,10 @@ services:
       - db-rwdir-1:/var/log
       - db-rwdir-2:/run
       #- db-rwdir-3:
+      - type: tmpfs
+        target: /var/lib/mysql-files:rw
     tmpfs:
       - /tmp
-      - /var/lib/mysql-files:rw
     environment:
       - MYSQL_DATABASE=${DB_NAME:-laravel_local}
       - MYSQL_USER=${DB_USER:-phper}
