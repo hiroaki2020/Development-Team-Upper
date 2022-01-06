@@ -2,13 +2,16 @@ version: "3.8"
 volumes:
   php-fpm-socket:
   app-rwdir-1:
+  app-rwdir-2:
   web-rwdir-1:
   web-rwdir-2:
+  web-rwdir-3:
   db-store:
   mysql-socket:
   db-rwdir-1:
   db-rwdir-2:
   db-rwdir-3:
+  db-rwdir-4:
 services:
   app:
     build:
@@ -18,9 +21,9 @@ services:
     volumes:
       - php-fpm-socket:/run/php-fpm
       - ./backend:/work/backend
-      - app-rwdir-1:/composer
+      - app-rwdir-1:/tmp
+      - app-rwdir-2:/composer
       - mysql-socket:/run/mysql
-    tmpfs: /tmp
     environment:
       - DB_CONNECTION=mysql
       - DB_DATABASE=${DB_NAME:-laravel_local}
@@ -47,7 +50,7 @@ services:
       - ./backend:/work/backend:ro
       - web-rwdir-1:/var/cache/nginx
       - web-rwdir-2:/etc/nginx
-    tmpfs: /tmp
+      - web-rwdir-3:/tmp
     environment:
       - WEB_PORT=8081
     logging:
@@ -68,11 +71,8 @@ services:
       - mysql-socket:/run/mysql-socket
       - db-rwdir-1:/var/log
       - db-rwdir-2:/run
-      #- db-rwdir-3:
-      - type: tmpfs
-        target: /var/lib/mysql-files:rw
-    tmpfs:
-      - /tmp
+      - db-rwdir-3:/var/lib/mysql-files
+      - db-rwdir-4:/tmp
     environment:
       - MYSQL_DATABASE=${DB_NAME:-laravel_local}
       - MYSQL_USER=${DB_USER:-phper}

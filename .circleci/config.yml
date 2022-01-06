@@ -50,15 +50,7 @@ jobs:
       - run:
           name: wait until db container is ready
           command: | 
-            until docker-compose exec db mysqladmin -s ping
-            do
-              sleep 1
-            done
-            while docker-compose exec db mysqladmin -s ping
-            do
-              sleep 1
-            done
-            until docker-compose exec db mysqladmin -s ping
+            until docker-compose exec db [ -f /var/lib/mysql-files/mysql-init-complete ] && mysqladmin -s ping
             do
               sleep 1
             done
