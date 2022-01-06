@@ -13,10 +13,8 @@ jobs:
           name: change docker and docker-compose commands' permissions if circleci runs locally
           command: |
             if [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
-              sudo usermod -aG docker circleci
-              #sudo chmod u+s /usr/bin/docker
-              #sudo chmod u+s /usr/local/bin/docker-compose
-              # consider 2 lines above can be replaced by adding user to docker group
+              sudo chmod u+s /usr/bin/docker
+              sudo chmod u+s /usr/local/bin/docker-compose
             fi
       - run:
           name: create .env and set env variables
@@ -43,6 +41,12 @@ jobs:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/change-socket-permission.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
           paths:
             - ./circleci-cache/docker-images.tar
+      - run:
+          name: disable bind mount in docker-compose file
+          command: sed -i -e '/- .\/backend:\/work\/backend/s/^/#/g' docker-compose.yml
+      - run:
+          name: test
+          command: cat docker-compose.yml > /tmp/test.txt
       - run:
           name: spin up containers
           command: docker-compose up -d
