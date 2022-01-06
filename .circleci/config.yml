@@ -45,9 +45,6 @@ jobs:
           name: disable bind mount in docker-compose file
           command: sed -i -e '/- .\/backend:\/work\/backend/s/^/#/g' docker-compose.yml
       - run:
-          name: test
-          command: cat docker-compose.yml > /tmp/test.txt
-      - run:
           name: spin up containers
           command: docker-compose up -d
       - run:
