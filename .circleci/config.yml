@@ -43,7 +43,10 @@ jobs:
             - ./circleci-cache/docker-images.tar
       - run:
           name: disable bind mount in docker-compose file
-          command: sed -i -e '/- .\/backend:\/work\/backend/s/^/#/g' docker-compose.yml
+          command: sed -i -e '/^volumes:/a  app-bind-mount-dir:' -e '/- .\/backend:\/work\/backend/s/.\/backend/app-bind-mount-dir/g' docker-compose.yml
+      - run:
+          name: test
+          command: cat docker-compose.yml > /tmp/test.txt
       - run:
           name: spin up containers
           command: docker-compose up -d
