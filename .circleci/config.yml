@@ -19,8 +19,8 @@ jobs:
       - run:
           name: create .env and set env variables
           command: |
-            echo 'DTUJ_IMAGE_NAME_PREFIX="dtuj_circleci"' > ./.env
-            echo 'COMPOSE_PROJECT_NAME="dtuj_circleci"' >> ./.env
+            echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
+            echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
             echo 'APP_KEY=' > ./backend/.env
             echo 'APP_ENV=testing' >> ./backend/.env
       - restore_cache:
@@ -44,9 +44,6 @@ jobs:
       - run:
           name: disable bind mount in docker-compose file
           command: sed -i -e '/^volumes:/a\  app-bind-mount-dir:' -e '/- \.\/backend:\/work\/backend/s/\.\/backend/app-bind-mount-dir/g' docker-compose.yml
-      - run:
-          name: test
-          command: cat docker-compose.yml > /tmp/test.txt
       - run:
           name: spin up containers
           command: docker-compose up -d

@@ -44,7 +44,7 @@ services:
       dockerfile: ./infra/docker/nginx/Dockerfile
     image: "${DTUJ_IMAGE_NAME_PREFIX-dtuj}_web"
     ports:
-      - ${CONTAINER_WEB_PORT:-81}:8081
+      - ${DTUJ_WEB_CONTAINER_HOST_PORT-82}:8080
     volumes:
       - php-fpm-socket:/run/php-fpm:ro
       - ./backend:/work/backend:ro
@@ -52,7 +52,7 @@ services:
       - web-rwdir-2:/etc/nginx
       - web-rwdir-3:/tmp
     environment:
-      - WEB_PORT=8081
+      - NGINX_PORT=8080
     logging:
       driver: "json-file"
       options:
