@@ -48,21 +48,21 @@ jobs:
           name: spin up containers
           command: docker-compose up -d
       - run:
-          name: wait until db container is ready
-          command: | 
-            until docker-compose exec db [ -f /var/lib/mysql-files/mysql-init-complete ] && docker-compose exec db mysqladmin -s ping
-            do
-              sleep 1
-            done
-      - run:
           name: copy data from host to container
           command: docker cp ./backend/. dtuj_circleci_app_1:/work/backend
       - run:
           name: chown backend dir
           command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
       - run:
-          name: install composer
+          name: install composer packages
           command: docker-compose exec app composer install --no-scripts --no-plugins
+      - run:
+          name: wait until db container is ready
+          command: | 
+            until docker-compose exec db [ -f /var/lib/mysql-files/mysql-init-complete ] && docker-compose exec db mysqladmin -s ping
+            do
+              sleep 1
+            done
       - run:
           name: test migration
           command: docker-compose exec app php artisan migrate
