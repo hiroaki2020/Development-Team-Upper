@@ -28,7 +28,7 @@ jobs:
             echo 'APP_KEY=' > ./backend/.env
             echo 'APP_ENV=testing' >> ./backend/.env
       - restore_cache:
-          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/change-socket-permission.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
       - run:
           name: load images from cache if it exists, build ones if not
           command: | 
@@ -42,7 +42,7 @@ jobs:
               docker save -o ./circleci-cache/docker-images.tar dtuj_circleci_app dtuj_circleci_web dtuj_circleci_db
             fi
       - save_cache:
-          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/change-socket-permission.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
           paths:
             - ./circleci-cache/docker-images.tar
       - run:
