@@ -24,13 +24,7 @@ RUN apt-get update && \
   docker-php-ext-install intl pdo_mysql zip bcmath gd exif && \
   addgroup --system --gid 555 dtuj && \
   adduser --system --disabled-login --ingroup dtuj --no-create-home --home /nonexistent --gecos dtuj --shell /bin/false --uid 555 dtuj && \
-  addgroup --system --gid 102 nginx && \
-  adduser --system --disabled-login --ingroup nginx --no-create-home --home /var/cache/nginx --gecos nginx --shell /sbin/nologin --uid 102 nginx && \
-  addgroup nginx dtuj && \
   delgroup sudo && \
-  addgroup --system --gid 27 mysql && \
-  adduser --system --disabled-login --ingroup mysql --home /var/lib/mysql --gecos 'MySQL Server' --shell /bin/false --uid 27 mysql && \
-  adduser dtuj mysql && \
   umask 0027 && \
   mkdir -p /work/backend /composer && \
   chown dtuj:dtuj /var/run/php-fpm /composer /work && \
