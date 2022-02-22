@@ -126,3 +126,7 @@ ide-helper:
 	docker-compose exec app php artisan ide-helper:generate
 	docker-compose exec app php artisan ide-helper:meta
 	docker-compose exec app php artisan ide-helper:models --nowrite
+kubeapply:
+	export "DTUJ_K8S_LOCAL_APP_PATH=`pwd`/backend" && envsubst < k8s-local.yaml | kubectl apply -f -
+kubedelete:
+	export "DTUJ_K8S_LOCAL_APP_PATH=`pwd`/backend" && envsubst < k8s-local.yaml | kubectl delete -f -
