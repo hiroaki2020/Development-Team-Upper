@@ -1,7 +1,7 @@
 up:
 	docker-compose up -d
 build:
-	docker-compose build --no-cache --force-rm
+	docker-compose build --no-cache --force-rm --parallel
 laravel-install:
 	docker-compose exec app composer create-project --prefer-dist laravel/laravel .
 create-project:
@@ -127,6 +127,33 @@ ide-helper:
 	docker-compose exec app php artisan ide-helper:meta
 	docker-compose exec app php artisan ide-helper:models --nowrite
 kubeapply:
-	export "DTUJ_K8S_LOCAL_APP_PATH=`pwd`/backend" && envsubst < k8s-local.yaml | kubectl apply -f -
+#	kubectl apply -f k8s-local-secret.yaml && export "LOCAL_DTUJ_PROJECT_PATH=`pwd`" && envsubst < k8s-local.yaml | kubectl apply -f -
+	kubectl apply -f k8s-local-secret.yaml && kubectl apply -f k8s-local.yaml
 kubedelete:
-	export "DTUJ_K8S_LOCAL_APP_PATH=`pwd`/backend" && envsubst < k8s-local.yaml | kubectl delete -f -
+#	export "LOCAL_DTUJ_PROJECT_PATH=`pwd`" && envsubst < k8s-local.yaml | kubectl delete -f - && kubectl delete -f k8s-local-secret.yaml
+	kubectl delete -f k8s-local.yaml && kubectl delete -f k8s-local-secret.yaml
+docker-inside-minikube:
+	eval $$(minikube docker-env)
+minikube-up:
+	if [ "`docker container ls -a --format '{{.Names}}' | grep -x 'minikube'`" = "minikube" ]; then \
+		minikube start; \
+	else \
+		minikube start --mount --mount-string `pwd`:/host/dtuj --nodes 2; \
+		minikube ssh -- sudo mkdir /data/mysql; \
+		minikube ssh -- sudo chown 27:27 /data/mysql; \
+		minikube ssh --node minikube-m02 -- sudo mkdir /data/mysql; \
+		minikube ssh --node minikube-m02 -- sudo chown 27:27 /data/mysql; \
+	fi
+minikube-down:
+	minikube stop
+minikube-delete:
+	minikube delete --all
+minikube-build:
+	minikube ssh -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/php --output type=image,name=docker.io/hiroaki2020/dtuj_app:1.0,push=false
+	minikube ssh -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/nginx --output type=image,name=docker.io/hiroaki2020/dtuj_web:1.0,push=false
+	minikube ssh -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/mysql --output type=image,name=docker.io/hiroaki2020/dtuj_db:1.0,push=false
+	minikube ssh -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/xtrabackup --output type=image,name=docker.io/hiroaki2020/dtuj_xtrabackup:1.0,push=false
+	minikube ssh -n minikube-m02 -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/php --output type=image,name=docker.io/hiroaki2020/dtuj_app:1.0,push=false
+	minikube ssh -n minikube-m02 -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/nginx --output type=image,name=docker.io/hiroaki2020/dtuj_web:1.0,push=false
+	minikube ssh -n minikube-m02 -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/mysql --output type=image,name=docker.io/hiroaki2020/dtuj_db:1.0,push=false
+	minikube ssh -n minikube-m02 -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/xtrabackup --output type=image,name=docker.io/hiroaki2020/dtuj_xtrabackup:1.0,push=false

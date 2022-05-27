@@ -1,4 +1,4 @@
-FROM mysql/mysql-server:8.0
+FROM mysql/mysql-server:8.0.28
 LABEL maintainer="hiroaki"
 
 ENV TZ=Asia/Tokyo

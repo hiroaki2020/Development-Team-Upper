@@ -1,24 +1,24 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: local-storage
+  name: app-dir-sc
 provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: WaitForFirstConsumer
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: app-pv
+  name: app-dir-pv
 spec:
   capacity:
     storage: 10Gi
   volumeMode: Filesystem
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   persistentVolumeReclaimPolicy: Delete
-  storageClassName: local-storage
+  storageClassName: app-dir-sc
   local:
-    path: ${DTUJ_K8S_LOCAL_APP_PATH}
+    path: /host/dtuj/backend
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -26,55 +26,21 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          - docker-desktop
+          - minikube
+          - minikube-m02
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: app-pvc
+  name: app-dir-pvc
 spec:
   resources:
     requests:
-      storage: 8Gi
+      storage: 10Gi
   volumeMode: Filesystem
   accessModes:
-    - ReadWriteOnce
-  storageClassName: local-storage
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: app
-spec:
-  selector:
-    matchLabels:
-      service: app
-  replicas: 2
-  template:
-    metadata:
-      labels:
-        service: app
-    spec:
-      containers:
-      - name: app
-        image: dtuj_app
-        imagePullPolicy: Never
-        resources:
-          limits:
-            memory: "512Mi"
-            cpu: "1000m"
-          requests:
-            memory: "128Mi"
-            cpu: "10m"
-        ports:
-        - containerPort: 9000
-        volumeMounts:
-          - mountPath: /work/backend
-            name: app
-      volumes:
-        - name: app
-          persistentVolumeClaim:
-            claimName: app-pvc
+    - ReadWriteMany
+  storageClassName: app-dir-sc
 ---
 apiVersion: v1
 kind: Service
@@ -92,6 +58,88 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: app
+spec:
+  selector:
+    matchLabels:
+      service: app
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        service: app
+    spec:
+      containers:
+      - name: app
+        image: hiroaki2020/dtuj_app:1.0
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 300m
+          requests:
+            memory: 128Mi
+            cpu: 100m
+        env:
+          - name: DB_CONNECTION
+            value: "mysql"
+          - name: DB_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: k8s-containers-env-vars
+                key: db-database
+          - name: DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: k8s-containers-env-vars
+                key: db-username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: k8s-containers-env-vars
+                key: db-password
+          - name: LOG_REQUESTS
+            value: "true"
+        ports:
+        - containerPort: 9000
+        volumeMounts:
+          - mountPath: /work/backend
+            name: app
+      volumes:
+        - name: app
+          persistentVolumeClaim:
+            claimName: app-dir-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    service: web
+spec:
+  selector:
+    service: web
+  ports:
+  - port: 80
+    targetPort: 8080
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  name: web
+#  labels:
+#    service: web
+#spec:
+#  type: NodePort
+#  selector:
+#    service: web
+#  ports:
+#  - port: 80
+#    targetPort: 8080
+#    nodePort: 30080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: web
 spec:
   selector:
@@ -105,86 +153,357 @@ spec:
     spec:
       containers:
       - name: web
-        image: dtuj_web
-        imagePullPolicy: Never
+        image: hiroaki2020/dtuj_web:1.0
+        imagePullPolicy: IfNotPresent
         resources:
           limits:
-            memory: "512Mi"
-            cpu: "1000m"
+            memory: 128Mi
+            cpu: 100m
           requests:
-            memory: "128Mi"
-            cpu: "10m"
-        ports:
-        - containerPort: 8080
+            memory: 64Mi
+            cpu: 50m
         env:
         - name: NGINX_PORT
           value: "8080"
+        ports:
+        - containerPort: 8080
         volumeMounts:
           - mountPath: /work/backend
             name: app
       volumes:
         - name: app
           persistentVolumeClaim:
-            claimName: app-pvc
+            claimName: app-dir-pvc
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: db-store-sc
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: db-store-pv
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  #persistentVolumeReclaimPolicy: Delete
+  storageClassName: db-store-sc
+  local:
+    path: /data/mysql
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - minikube
+          #- minikube-m02
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: db-store-pv-2
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  #persistentVolumeReclaimPolicy: Delete
+  storageClassName: db-store-sc
+  local:
+    path: /data/mysql
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          #- minikube
+          - minikube-m02
+#---
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: db-store-pvc
+#spec:
+#  resources:
+#    requests:
+#      storage: 8Gi
+#  volumeMode: Filesystem
+#  accessModes:
+#    - ReadWriteOnce
+#  storageClassName: db-store-sc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db
+  labels:
+    service: db
+data:
+  my.cnf: |
+    [mysqld]
+    gtid_mode=ON
+    enforce_gtid_consistency=ON
+  #slave.cnf: |
+  #  [mysqld]
+  #  log-bin
+  #  gtid_mode=ON
+  #  enforce_gtid_consistency=ON
+  #  [mysqld]
+  #  super-read-only
+  #  gtid_mode=ON
+  #  enforce_gtid_consistency=ON
+  #  skip_replica_start
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: web
+  name: db
   labels:
-    service: web
+    service: db
 spec:
-  type: NodePort
+  clusterIP: None
   selector:
-    service: web
+    service: db
   ports:
-  - port: 80
-    targetPort: 8080
-    nodePort: 30080
+  - name: db
+    port: 3306
+#    targetPort: 3306
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-read-only
+  labels:
+    service: db
+spec:
+  selector:
+    service: db
+  ports:
+  - name: db
+    port: 3306
+#    targetPort: <Target Port>
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: db
 spec:
   selector:
     matchLabels:
       service: db
+  serviceName: db
   replicas: 2
   template:
     metadata:
       labels:
         service: db
     spec:
+      initContainers:
+      - name: init-db
+        image: hiroaki2020/dtuj_db:1.0
+        command:
+        - bash
+        - "-c"
+        - |
+          set -ex
+          [[ `uname -n` =~ -([0-9]+)$ ]] || exit 1
+          if [[ ${BASH_REMATCH[1]} -eq 0 ]]; then
+            cp /mnt/config-map/my.cnf /mnt/conf.d/
+          else
+            cp /mnt/config-map/my.cnf /mnt/conf.d/
+            cat << EOL >> /mnt/conf.d/my.cnf
+            log_bin=OFF
+            super-read-only
+            skip_replica_start
+            EOL
+          fi
+          echo server-id=$((100 + ${BASH_REMATCH[1]})) >> /mnt/conf.d/my.cnf
+        volumeMounts:
+        - name: conf
+          mountPath: /mnt/conf.d
+        - name: config-map
+          mountPath: /mnt/config-map
+      - name: clone-db
+        image: hiroaki2020/dtuj_xtrabackup:1.0
+        command:
+        - bash
+        - "-c"
+        - |
+          set -ex
+          [[ -n "`ls -A /var/lib/mysql`" ]] && exit 0
+          [[ `uname -n` =~ -([0-9]+)$ ]] || exit 1
+          [[ ${BASH_REMATCH[1]} -eq 0 ]] && exit 0
+          ncat --recv-only db-$((${BASH_REMATCH[1]} - 1)).db 3307 | xbstream -x -C /var/lib/mysql
+          xtrabackup --prepare --target-dir=/var/lib/mysql
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/mysql
+          #subPath: mysql
+        - name: conf
+          mountPath: /etc/mysql
       containers:
       - name: db
-        image: dtuj_db
-        imagePullPolicy: Never
+        image: hiroaki2020/dtuj_db:1.0
+        imagePullPolicy: IfNotPresent
         resources:
           limits:
-            memory: "512Mi"
-            cpu: "1000m"
+            memory: 512Mi
+            cpu: 300m
           requests:
-            memory: "128Mi"
-            cpu: "10m"
+            memory: 64Mi
+            cpu: 50m
+        env:
+          - name: MYSQL_PASSWORD
+            value: "password"
+          - name: MYSQL_USER
+            value: "user"
+          - name: MYSQL_DATABASE
+            value: "database"
+          - name: MYSQL_ROOT_PASSWORD
+            value: "root-password"
+          - name: MASTER_PASSWORD
+            value: "master-password"
+          #- name: MYSQL_DATABASE
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: mysql-database
+          #- name: MYSQL_USER
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: mysql-user
+          #- name: MYSQL_PASSWORD
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: mysql-password
+          #- name: MYSQL_ROOT_PASSWORD
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: mysql-root-password
+          #- name: MASTER_PASSWORD
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: master-password
         ports:
         - containerPort: 3306
+          name: db
         volumeMounts:
-          - mountPath: /var/lib/mysql
-            name: mysql-data-store
+        - name: data
+          mountPath: /var/lib/mysql
+          #subPath: mysql
+        - name: conf
+          mountPath: /etc/mysql
+        startupProbe:
+          exec:
+            command: ["mysqladmin", "ping"]
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+        livenessProbe:
+          exec:
+            command: ["mysqladmin", "ping"]
+          #initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["mysql", "-h", "127.0.0.1", "-u", "$(MYSQL_USER)", "-p$(MYSQL_PASSWORD)", "-e", "SELECT 1"]
+          #initialDelaySeconds: 5
+          periodSeconds: 2
+          timeoutSeconds: 1
+      - name: xtrabackup
+        image: hiroaki2020/dtuj_xtrabackup:1.0
+        ports:
+        - name: xtrabackup
+          containerPort: 3307
+        command:
+        - bash
+        - "-c"
+        - |
+          set -ex
+          cd /var/lib/mysql
+
+          if [[ -f xtrabackup_slave_info && "x$(<xtrabackup_slave_info)" != "x" ]]; then
+            cat xtrabackup_slave_info | sed -E 's/;$//g' > change_master_to.sql.in
+            rm -f xtrabackup_slave_info xtrabackup_binlog_info
+          elif [[ -f xtrabackup_binlog_info ]]; then
+            [[ `cat xtrabackup_binlog_info` =~ ^(.*?)[[:space:]]+(.*?)$ ]] || exit 1
+            rm -f xtrabackup_binlog_info xtrabackup_slave_info
+            echo "CHANGE REPLICATION SOURCE TO MASTER_LOG_FILE='${BASH_REMATCH[1]}',\
+            MASTER_LOG_POS=${BASH_REMATCH[2]}" > change_master_to.sql.in
+          fi
+
+          if [[ -f change_master_to.sql.in ]]; then
+            echo "Waiting for mysqld to be ready (accepting connections)"
+            until mysql -h 127.0.0.1 -u $(MYSQL_USER) -p$(MYSQL_PASSWORD) -e "SELECT 1"; do sleep 1; done
+            
+            echo "Initializing replication from clone position"
+            mysql -h 127.0.0.1 \
+                  -u $(MYSQL_USER) \
+                  -p$(MYSQL_PASSWORD) \
+                  -e "$(<change_master_to.sql.in), \
+                          MASTER_HOST='db-0.db', \
+                          MASTER_USER='$(MYSQL_USER)', \
+                          MASTER_PASSWORD='$(MYSQL_PASSWORD)', \
+                          MASTER_CONNECT_RETRY=10; \
+                        START REPLICA;" || exit 1
+            mv change_master_to.sql.in change_master_to.sql.orig
+          fi
+
+          exec ncat --listen --keep-open --send-only --max-conns=1 3307 -c \
+            "xtrabackup --backup --slave-info --stream=xbstream --host=127.0.0.1 --user=$(MYSQL_USER) --password=$(MYSQL_PASSWORD)"
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/mysql
+          #subPath: mysql
+        - name: conf
+          mountPath: /etc/mysql
+        resources:
+          limits:
+            memory: 512Mi
+            cpu: 300m
+          requests:
+            memory: 64Mi
+            cpu: 50m
+        env:
+          - name: MYSQL_PASSWORD
+            value: "password"
+          - name: MYSQL_USER
+            value: "user"
+          - name: MYSQL_DATABASE
+            value: "database"
+          - name: MYSQL_ROOT_PASSWORD
+            value: "root-password"
+          - name: MASTER_PASSWORD
+            value: "master-password"
       volumes:
-        - name: mysql-data-store
-          emptyDir: {}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: db
-  labels:
-    service: db
-spec:
-  selector:
-    service: db
-  ports:
-  - port: 3306
-    targetPort: 3306
+      - name: conf
+        emptyDir: {}
+      - name: config-map
+        configMap:
+          name: db
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: db-store-sc
+      resources:
+        requests:
+          storage: 10Gi
+      volumeMode: Filesystem
