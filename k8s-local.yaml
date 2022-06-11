@@ -83,21 +83,31 @@ spec:
         env:
           - name: DB_CONNECTION
             value: "mysql"
-          - name: DB_DATABASE
-            valueFrom:
-              secretKeyRef:
-                name: k8s-containers-env-vars
-                key: db-database
-          - name: DB_USERNAME
-            valueFrom:
-              secretKeyRef:
-                name: k8s-containers-env-vars
-                key: db-username
+          - name: DB_HOST_READ
+            value: "db-read-only"
+          - name: DB_HOST_WRITE
+            value: "db-0.db.default.svc.cluster.local"
+          #- name: DB_DATABASE
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: db-database
           - name: DB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: k8s-containers-env-vars
-                key: db-password
+            value: "password"
+          - name: DB_USERNAME
+            value: "user"
+          - name: DB_DATABASE
+            value: "database"
+          #- name: DB_USERNAME
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: db-username
+          #- name: DB_PASSWORD
+          #  valueFrom:
+          #    secretKeyRef:
+          #      name: k8s-containers-env-vars
+          #      key: db-password
           - name: LOG_REQUESTS
             value: "true"
         ports:
@@ -120,7 +130,7 @@ spec:
   selector:
     service: web
   ports:
-  - port: 80
+  - port: 8080
     targetPort: 8080
 #apiVersion: v1
 #kind: Service
@@ -145,7 +155,7 @@ spec:
   selector:
     matchLabels:
       service: web
-  replicas: 2
+  replicas: 1
   template:
     metadata:
       labels:
@@ -192,7 +202,6 @@ spec:
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce
-  #persistentVolumeReclaimPolicy: Delete
   storageClassName: db-store-sc
   local:
     path: /data/mysql
@@ -204,7 +213,6 @@ spec:
           operator: In
           values:
           - minikube
-          #- minikube-m02
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -216,7 +224,6 @@ spec:
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce
-  #persistentVolumeReclaimPolicy: Delete
   storageClassName: db-store-sc
   local:
     path: /data/mysql
@@ -227,21 +234,7 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          #- minikube
           - minikube-m02
-#---
-#apiVersion: v1
-#kind: PersistentVolumeClaim
-#metadata:
-#  name: db-store-pvc
-#spec:
-#  resources:
-#    requests:
-#      storage: 8Gi
-#  volumeMode: Filesystem
-#  accessModes:
-#    - ReadWriteOnce
-#  storageClassName: db-store-sc
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -254,16 +247,6 @@ data:
     [mysqld]
     gtid_mode=ON
     enforce_gtid_consistency=ON
-  #slave.cnf: |
-  #  [mysqld]
-  #  log-bin
-  #  gtid_mode=ON
-  #  enforce_gtid_consistency=ON
-  #  [mysqld]
-  #  super-read-only
-  #  gtid_mode=ON
-  #  enforce_gtid_consistency=ON
-  #  skip_replica_start
 ---
 apiVersion: v1
 kind: Service
@@ -323,10 +306,10 @@ spec:
           else
             cp /mnt/config-map/my.cnf /mnt/conf.d/
             cat << EOL >> /mnt/conf.d/my.cnf
-            log_bin=OFF
-            super-read-only
-            skip_replica_start
-            EOL
+          log_bin=OFF
+          super-read-only
+          skip_replica_start
+          EOL
           fi
           echo server-id=$((100 + ${BASH_REMATCH[1]})) >> /mnt/conf.d/my.cnf
         volumeMounts:
@@ -372,8 +355,8 @@ spec:
             value: "database"
           - name: MYSQL_ROOT_PASSWORD
             value: "root-password"
-          - name: MASTER_PASSWORD
-            value: "master-password"
+          - name: REPLICA_PASSWORD
+            value: "replica-password"
           #- name: MYSQL_DATABASE
           #  valueFrom:
           #    secretKeyRef:
@@ -394,11 +377,11 @@ spec:
           #    secretKeyRef:
           #      name: k8s-containers-env-vars
           #      key: mysql-root-password
-          #- name: MASTER_PASSWORD
+          #- name: REPLICA_PASSWORD
           #  valueFrom:
           #    secretKeyRef:
           #      name: k8s-containers-env-vars
-          #      key: master-password
+          #      key: source-password
         ports:
         - containerPort: 3306
           name: db
@@ -442,10 +425,10 @@ spec:
             cat xtrabackup_slave_info | sed -E 's/;$//g' > change_master_to.sql.in
             rm -f xtrabackup_slave_info xtrabackup_binlog_info
           elif [[ -f xtrabackup_binlog_info ]]; then
-            [[ `cat xtrabackup_binlog_info` =~ ^(.*?)[[:space:]]+(.*?)$ ]] || exit 1
+            [[ `cat xtrabackup_binlog_info` =~ ^([^.]*\.[0-9]+)[[:space:]]+([0-9]+) ]] || exit 1
             rm -f xtrabackup_binlog_info xtrabackup_slave_info
-            echo "CHANGE REPLICATION SOURCE TO MASTER_LOG_FILE='${BASH_REMATCH[1]}',\
-            MASTER_LOG_POS=${BASH_REMATCH[2]}" > change_master_to.sql.in
+            echo "CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='${BASH_REMATCH[1]}',\
+            SOURCE_LOG_POS=${BASH_REMATCH[2]}" > change_master_to.sql.in
           fi
 
           if [[ -f change_master_to.sql.in ]]; then
@@ -453,18 +436,30 @@ spec:
             until mysql -h 127.0.0.1 -u $(MYSQL_USER) -p$(MYSQL_PASSWORD) -e "SELECT 1"; do sleep 1; done
             
             echo "Initializing replication from clone position"
-            mysql -h 127.0.0.1 \
-                  -u $(MYSQL_USER) \
-                  -p$(MYSQL_PASSWORD) \
+            mysql -u root \
+                  -p$(MYSQL_ROOT_PASSWORD) \
                   -e "$(<change_master_to.sql.in), \
-                          MASTER_HOST='db-0.db', \
-                          MASTER_USER='$(MYSQL_USER)', \
-                          MASTER_PASSWORD='$(MYSQL_PASSWORD)', \
-                          MASTER_CONNECT_RETRY=10; \
+                          SOURCE_HOST='db-0.db', \
+                          SOURCE_USER='replica', \
+                          SOURCE_PASSWORD='$(REPLICA_PASSWORD)', \
+                          SOURCE_CONNECT_RETRY=10; \
                         START REPLICA;" || exit 1
             mv change_master_to.sql.in change_master_to.sql.orig
           fi
 
+          [[ `uname -n` =~ -([0-9]+)$ ]] || exit 1
+          if [[ ${BASH_REMATCH[1]} -eq 0 ]]; then
+            until mysql -h 127.0.0.1 -u $(MYSQL_USER) -p$(MYSQL_PASSWORD) -e "SELECT 1"; do sleep 1; done
+            if [[ `mysql -u root -p$(MYSQL_ROOT_PASSWORD) -e "SELECT user FROM mysql.user;" | grep replica` = "" ]]; then
+              mysql -u root \
+              -p$(MYSQL_ROOT_PASSWORD) \
+              -e "CREATE USER 'replica'@'%' IDENTIFIED BY '$(REPLICA_PASSWORD)'; \
+                  GRANT REPLICATION SLAVE ON *.* TO 'replica'@'%'; \
+                  GRANT BACKUP_ADMIN, PROCESS, RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO '$(MYSQL_USER)'@'%'; \
+                  GRANT SELECT ON performance_schema.log_status TO '$(MYSQL_USER)'@'%'; \
+                  GRANT SELECT ON performance_schema.keyring_component_status TO '$(MYSQL_USER)'@'%';"
+            fi
+          fi
           exec ncat --listen --keep-open --send-only --max-conns=1 3307 -c \
             "xtrabackup --backup --slave-info --stream=xbstream --host=127.0.0.1 --user=$(MYSQL_USER) --password=$(MYSQL_PASSWORD)"
         volumeMounts:
@@ -489,8 +484,8 @@ spec:
             value: "database"
           - name: MYSQL_ROOT_PASSWORD
             value: "root-password"
-          - name: MASTER_PASSWORD
-            value: "master-password"
+          - name: REPLICA_PASSWORD
+            value: "replica-password"
       volumes:
       - name: conf
         emptyDir: {}
