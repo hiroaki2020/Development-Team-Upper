@@ -10,6 +10,7 @@ volumes:
   db-rwdir-2:
   db-rwdir-3:
   db-rwdir-4:
+  kvs:
 services:
   app:
     build:
@@ -85,3 +86,16 @@ services:
         max-file: "5"
         compress: "true"
     read_only: true
+
+  kvs:
+    build:
+      context: .
+      dockerfile: ./infra/docker/redis/Dockerfile
+    image: "${DTUJ_IMAGE_NAME_PREFIX-dtuj}_kvs"
+    ports:
+      - 6379
+    volumes:
+      - kvs:/data
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASS-secret}
+      - REDISCLI_AUTH=${REDIS_PASS-secret}

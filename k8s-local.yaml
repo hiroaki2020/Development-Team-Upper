@@ -120,6 +120,34 @@ spec:
           persistentVolumeClaim:
             claimName: app-dir-pvc
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: queue-worker
+      queue: default
+  template:
+    metadata:
+      labels:
+        service: queue-worker
+        queue: default
+    spec:
+      containers:
+      - name: queue-worker
+        image: hiroaki2020/dtuj_app:1.0
+        command: [ "/usr/local/bin/php" ]
+        args: [ "artisan", "queue:work", "--timeout=80", "--max-time=3600" ]
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 9000
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -127,11 +155,13 @@ metadata:
   labels:
     service: web
 spec:
+  type: NodePort
   selector:
     service: web
   ports:
   - port: 8080
     targetPort: 8080
+    nodePort: 30080
 #apiVersion: v1
 #kind: Service
 #metadata:
@@ -155,7 +185,7 @@ spec:
   selector:
     matchLabels:
       service: web
-  replicas: 1
+  replicas: 2
   template:
     metadata:
       labels:
@@ -286,7 +316,7 @@ spec:
     matchLabels:
       service: db
   serviceName: db
-  replicas: 2
+  replicas: 1
   template:
     metadata:
       labels:

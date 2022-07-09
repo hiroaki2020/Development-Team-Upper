@@ -6,6 +6,14 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Event;
+use App\Models\User;
+use App\Observers\UserObserver;
+use App\Models\Skill;
+use App\Observers\SkillObserver;
+use App\Models\Team;
+use App\Observers\TeamObserver;
+use App\Models\Requirement;
+use App\Observers\RequirementObserver;
 
 class EventServiceProvider extends ServiceProvider
 {
@@ -27,6 +35,9 @@ class EventServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        //
+        User::observe(UserObserver::class);
+        Skill::observe(SkillObserver::class);
+        Team::observe(TeamObserver::class);
+        Requirement::observe(RequirementObserver::class);
     }
 }

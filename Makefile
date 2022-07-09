@@ -2,6 +2,14 @@ up:
 	docker-compose up -d
 build:
 	docker-compose build --no-cache --force-rm --parallel
+build-app:
+	docker-compose build --no-cache --force-rm --parallel app
+build-web:
+	docker-compose build --no-cache --force-rm --parallel web
+build-db:
+	docker-compose build --no-cache --force-rm --parallel db
+build-kvs:
+	docker-compose build --no-cache --force-rm --parallel kvs
 laravel-install:
 	docker-compose exec app composer create-project --prefer-dist laravel/laravel .
 create-project:
@@ -63,6 +71,10 @@ web:
 	docker-compose exec web ash
 app:
 	docker-compose exec app bash
+kvs:
+	docker-compose exec kvs ash
+redis-cli:
+	docker-compose exec kvs ash -c 'redis-cli'
 migrate:
 	docker-compose exec app php artisan migrate
 fresh:
@@ -119,6 +131,8 @@ db:
 	docker-compose exec db bash
 sql:
 	docker-compose exec db bash -c 'mysql -u $$MYSQL_USER -p$$MYSQL_PASSWORD $$MYSQL_DATABASE'
+sql-root:
+	docker-compose exec db bash -c 'mysql -u root -p$$MYSQL_ROOT_PASSWORD $$MYSQL_DATABASE'
 redis:
 	docker-compose exec redis redis-cli
 ide-helper:
