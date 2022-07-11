@@ -1,7 +1,7 @@
 FROM percona/percona-xtrabackup:8.0.28
 LABEL maintainer="hiroaki"
 
-RUN microdnf -y update && \
+RUN microdnf update && \
     rm -rf /var/cache/yum && \
     microdnf -y install nmap-ncat shadow-utils && \
     groupadd --system -g 27 mysql && \

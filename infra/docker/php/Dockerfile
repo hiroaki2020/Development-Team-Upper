@@ -13,8 +13,8 @@ ENV TZ=Asia/Tokyo \
 
 COPY --from=composer:2.0.11 /usr/bin/composer /usr/bin/composer
 
-RUN apt-get -y update && \
-  apt-get -y install git libicu-dev libonig-dev libzip-dev unzip locales libfreetype6-dev libjpeg62-turbo-dev libpng-dev libzstd-dev && \
+RUN apt-get update && \
+  apt-get -y install git libicu-dev libonig-dev libzip-dev unzip locales libfreetype6-dev libjpeg62-turbo-dev libpng-dev liblz4-dev && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
   locale-gen ja_JP.UTF-8 && \
@@ -22,9 +22,12 @@ RUN apt-get -y update && \
   mkdir /var/run/php-fpm && \
   docker-php-ext-configure gd --with-freetype --with-jpeg && \
   docker-php-ext-install intl pdo_mysql zip bcmath gd exif && \
-  pecl install igbinary-3.2.7 && \
-  pecl install -D 'enable-redis-igbinary="yes" enable-redis-lzf="no" enable-redis-zstd="yes"' redis-5.3.7 && \
-  docker-php-ext-enable igbinary redis && \
+  pecl install msgpack-2.1.2 && \
+  docker-php-ext-enable msgpack && \
+  pecl bundle -d /tmp redis-5.3.7 && \
+  docker-php-ext-configure /tmp/redis --enable-redis-msgpack --enable-redis-lz4 --with-liblz4 && \
+  docker-php-ext-install /tmp/redis && \
+  rm -rf /tmp/redis /tmp/redis-5.3.7.tgz && \
   addgroup --system --gid 555 dtuj && \
   adduser --system --disabled-login --ingroup dtuj --no-create-home --home /nonexistent --gecos dtuj --shell /bin/false --uid 555 dtuj && \
   delgroup sudo && \

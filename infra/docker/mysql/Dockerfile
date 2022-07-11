@@ -3,7 +3,7 @@ LABEL maintainer="hiroaki"
 
 ENV TZ=Asia/Tokyo
 
-RUN microdnf -y update && \
+RUN microdnf update && \
   rm -rf /var/cache/yum && \
   microdnf -y install cronie-noanacron logrotate && \
   microdnf clean all && \
