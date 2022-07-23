@@ -4,6 +4,8 @@ build:
 	docker-compose build --no-cache --force-rm --parallel
 build-app:
 	docker-compose build --no-cache --force-rm --parallel app
+build-app-queue-worker:
+	docker-compose build --no-cache --force-rm --parallel app-queue-worker
 build-web:
 	docker-compose build --no-cache --force-rm --parallel web
 build-db:
@@ -71,6 +73,8 @@ web:
 	docker-compose exec web ash
 app:
 	docker-compose exec app bash
+app-queue-worker:
+	docker-compose exec app-queue-worker bash
 kvs:
 	docker-compose exec kvs ash
 redis-cli:

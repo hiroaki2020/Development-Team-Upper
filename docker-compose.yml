@@ -39,6 +39,24 @@ services:
         compress: "true"
     read_only: true
 
+  app-queue-worker:
+    build:
+      context: .
+      dockerfile: ./infra/docker/php/Dockerfile
+    image: "${DTUJ_IMAGE_NAME_PREFIX-dtuj}_app-queue-worker"
+    volumes:
+      - ./backend:/work/backend
+    environment:
+      - DB_CONNECTION=mysql
+      - DB_HOST_READ=db
+      - DB_HOST_WRITE=db
+      - DB_DATABASE=${DB_NAME-laravel_local}
+      - DB_USERNAME=${DB_USER-phper}
+      - DB_PASSWORD=${DB_PASS-secret}
+      - LOG_REQUESTS=true
+    entrypoint: /usr/local/bin/php
+    command: [ "artisan", "queue:work", "--timeout=80", "--max-time=3600" ]
+
   web:
     build:
       context: .
