@@ -161,6 +161,10 @@ minikube-up:
 		minikube ssh -- sudo chown 27:27 /data/mysql; \
 		minikube ssh --node minikube-m02 -- sudo mkdir /data/mysql; \
 		minikube ssh --node minikube-m02 -- sudo chown 27:27 /data/mysql; \
+		minikube ssh -- sudo mkdir /data/redis; \
+		minikube ssh -- sudo chown 999:1000 /data/redis; \
+		minikube ssh --node minikube-m02 -- sudo mkdir /data/redis; \
+		minikube ssh --node minikube-m02 -- sudo chown 999:1000 /data/redis; \
 	fi
 minikube-down:
 	minikube stop
