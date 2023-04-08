@@ -1,17 +1,29 @@
-version: 2
-jobs:
-  build:
+version: 2.1
+
+executors:
+  docker_executor:
     docker:
-      - image: cimg/base:2021.04
+      - image: cimg/base:2023.03
         #auth:
          #username: $DOCKERHUB_USER
          #password: $DOCKERHUB_PASSWORD
+workflows:
+  version: 2
+  test_on_develop_branch:
+    when: 
+      equal: [ develop, << pipeline.git.branch >> ]
+    jobs:
+      - unit_and_feature_test
+      
+jobs:
+  unit_and_feature_test:
+    executor: docker_executor
     working_directory: ~/project
     steps:
       - checkout
       - setup_remote_docker:
-          version: 20.10.7
-          docker_layer_caching: false
+          version: 20.10.18
+          docker_layer_caching: true
       - run:
           name: change docker and docker-compose commands' permissions if circleci runs locally
           command: |
