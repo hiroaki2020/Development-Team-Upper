@@ -3,3 +3,9 @@
 
 # Docker Compose
 .env
+
+# kubernetes
+k8s-local-secret.yaml
+logs.txt
+dashboard-adminuser.yaml
+dashboard-clusteradmin.yaml
