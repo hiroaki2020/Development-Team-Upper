@@ -1,5 +1,17 @@
 version: 2.1
 
+references:
+  include_develop_branch: &include_develop_branch
+    filters:
+      branches:
+        only: develop
+  when_built_locally: &when_built_locally
+    condition: 
+      matches: {
+        pattern: ".*localbuild.*",
+        value: "$CIRCLE_SHELL_ENV"
+      }
+
 executors:
   docker_executor:
     docker:
@@ -7,16 +19,38 @@ executors:
         #auth:
          #username: $DOCKERHUB_USER
          #password: $DOCKERHUB_PASSWORD
+
+#orbs:
+
 workflows:
   version: 2
-  test_on_develop_branch:
-    when: 
-      equal: [ develop, << pipeline.git.branch >> ]
+  test:
     jobs:
-      - unit_and_feature_test
+      - build_php:
+          *include_develop_branch
+      - build_nginx:
+          *include_develop_branch
+      - build_mysql:
+          *include_develop_branch
+      - build_redis:
+          *include_develop_branch
+      - 
       
+  staging:
+    jobs:
+      - deploy_to_staging:
+          filters:
+            branches:
+              only: /^release-v.*/
+  production:
+    jobs:
+      - deploy_to_production:
+          filters:
+            branches:
+              only: master
+
 jobs:
-  unit_and_feature_test:
+  build_php:
     executor: docker_executor
     working_directory: ~/project
     steps:
@@ -24,13 +58,14 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - run:
-          name: change docker and docker-compose commands' permissions if circleci runs locally
-          command: |
-            if [[ "$CIRCLE_SHELL_ENV" =~ .*localbuild.* ]]; then
-              sudo chmod u+s /usr/bin/docker
-              sudo chmod u+s /usr/local/bin/docker-compose
-            fi
+      - when:
+          *when_built_locally
+          steps:
+            - run:
+                name: change docker and docker-compose commands' permissions if circleci runs locally
+                command: |
+                  sudo chmod u+s /usr/bin/docker
+                  sudo chmod u+s /usr/local/bin/docker-compose
       - run:
           name: create .env and set env variables
           command: |
@@ -40,7 +75,7 @@ jobs:
             echo 'APP_KEY=' > ./backend/.env
             echo 'APP_ENV=testing' >> ./backend/.env
       - restore_cache:
-          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}-{{ checksum "infra/docker/redis/Dockerfile" }}-{{ checksum "infra/docker/redis/redis.conf" }}
       - run:
           name: load images from cache if it exists, build ones if not
           command: | 
@@ -54,7 +89,7 @@ jobs:
               docker save -o ./circleci-cache/docker-images.tar dtuj_circleci_app dtuj_circleci_web dtuj_circleci_db
             fi
       - save_cache:
-          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/my.cnf" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}-{{ checksum "infra/docker/redis/Dockerfile" }}-{{ checksum "infra/docker/redis/redis.conf" }}
           paths:
             - ./circleci-cache/docker-images.tar
       - run:
