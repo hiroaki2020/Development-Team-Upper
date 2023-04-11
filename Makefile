@@ -179,3 +179,6 @@ minikube-build:
 	minikube ssh -n minikube-m02 -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/nginx --output type=image,name=docker.io/hiroaki2020/dtuj_web:1.0,push=false
 	minikube ssh -n minikube-m02 -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/mysql --output type=image,name=docker.io/hiroaki2020/dtuj_db:1.0,push=false
 	minikube ssh -n minikube-m02 -- buildctl build --frontend=dockerfile.v0 --local context=/host/dtuj --local dockerfile=/host/dtuj/infra/docker/xtrabackup --output type=image,name=docker.io/hiroaki2020/dtuj_xtrabackup:1.0,push=false
+circleci-local-build:
+	circleci config process .circleci/config.yml > process.yml
+	circleci local execute -c process.yml local_build
