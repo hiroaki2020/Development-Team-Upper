@@ -112,10 +112,7 @@ jobs:
           command: docker-compose up -d
       - run:
           name: copy data from host to container
-          command: |
-            docker cp ./backend/. dtuj_circleci-app-1:/work/backend
-            docker cp ./backend/. dtuj_circleci-app-queue-worker-1:/work/backend
-            docker cp ./backend/. dtuj_circleci-web-1:/work/backend
+          command: docker cp ./backend/. dtuj_circleci-app-1:/work/backend
       - run:
           name: chown backend dir
           command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
@@ -306,10 +303,7 @@ jobs:
           command: docker-compose up -d
       - run:
           name: copy data from host to container
-          command: |
-            docker cp ./backend/. dtuj_circleci-app-1:/work/backend
-            docker cp ./backend/. dtuj_circleci-app-queue-worker-1:/work/backend
-            docker cp ./backend/. dtuj_circleci-web-1:/work/backend
+          command: docker cp ./backend/. dtuj_circleci-app-1:/work/backend
       - run:
           name: chown backend dir
           command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
