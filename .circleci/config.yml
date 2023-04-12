@@ -292,20 +292,12 @@ jobs:
       - attach_workspace:
           at: ./circleci-cache
       - run:
-          name: just a test
-          command: ls -al ./circleci-cache
-      - run:
           name: load images from image .tar files
           command: |
             docker load -i ./circleci-cache/php-image.tar
             docker load -i ./circleci-cache/nginx-image.tar
             docker load -i ./circleci-cache/mysql-image.tar
             docker load -i ./circleci-cache/redis-image.tar
-      
-  use_this_later:
-    executor: docker_executor
-    working_directory: ~/project
-    steps:
       - run:
           name: disable bind mount in docker-compose file
           command: sed -i -e '/^volumes:/a\  app-bind-mount-dir:' -e '/- \.\/backend:\/work\/backend/s/\.\/backend/app-bind-mount-dir/g' docker-compose.yml
@@ -314,7 +306,10 @@ jobs:
           command: docker-compose up -d
       - run:
           name: copy data from host to container
-          command: docker cp ./backend/. dtuj_circleci_app_1:/work/backend
+          command: |
+            docker cp ./backend/. dtuj_circleci-app-1:/work/backend
+            docker cp ./backend/. dtuj_circleci-app-queue-worker-1:/work/backend
+            docker cp ./backend/. dtuj_circleci-web-1:/work/backend
       - run:
           name: chown backend dir
           command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
@@ -343,5 +338,4 @@ jobs:
       - run:
           name: stop containers
           command: docker-compose down
-
-  
+      
