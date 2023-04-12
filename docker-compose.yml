@@ -65,7 +65,7 @@ services:
     ports:
       - ${DTUJ_WEB_CONTAINER_HOST_PORT-80}:8080
     volumes:
-      - ./backend:/work/backend:ro
+      - ./backend:/work/backend
       - web-rwdir-1:/var/cache/nginx
       - web-rwdir-2:/etc/nginx
       - web-rwdir-3:/tmp
