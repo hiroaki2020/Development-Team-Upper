@@ -149,22 +149,20 @@ jobs:
             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
       - restore_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}
-      - when:
-          condition:
-            equal: [ ./circleci-cache/php-image.tar, true ]
-          steps:
-            - run: docker load -i ./circleci-cache/php-image.tar
-      - when:
-          condition:
-            not:
-              equal: [ ./circleci-cache/php-image.tar, true ]
-          steps:
-            - run:
-                name: build and save an image
-                command: | 
-                  docker-compose build app --no-cache
-                  mkdir circleci-cache
-                  docker save -o ./circleci-cache/php-image.tar dtuj_circleci_app
+      - run:
+          name: load an image from .tar file if cache exists
+          command: |
+            if [[ -e ./circleci-cache/php-image.tar ]]; then
+              docker load -i ./circleci-cache/php-image.tar
+            fi
+      - run:
+          name: build and save an image if cache does not exist
+          command: |
+            if ![[ -e ./circleci-cache/php-image.tar ]]; then
+              docker-compose build app --no-cache
+              mkdir circleci-cache
+              docker save -o ./circleci-cache/php-image.tar dtuj_circleci_app
+            fi                  
       - save_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}
           paths:
