@@ -5,7 +5,10 @@ references:
     filters:
       branches:
         only: develop
-
+  prepare_executor_and_working_dir: &prepare_executor_and_working_dir
+    executor: docker_executor
+    working_directory: ~/project
+    
 executors:
   docker_executor:
     docker:
@@ -16,7 +19,21 @@ executors:
 
 #orbs:
 
-#commands:
+commands:
+  set_env_vars:
+    description: "set env vars for containers"
+    steps:
+      - run:
+          name: create .env and set env variables
+          command: |
+            echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
+            echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
+            echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
+            echo 'APP_KEY=' > ./backend/.env
+            echo 'APP_ENV=testing' >> ./backend/.env
+            echo 'SESSION_CONNECTION=session' >> ./backend/.env
+            echo 'REDIS_HOST=kvs' >> ./backend/.env
+            echo 'REDIS_PASSWORD=secret' >> ./backend/.env
 
 workflows:
   version: 2
@@ -129,24 +146,13 @@ jobs:
           command: docker-compose down
 
   build_php:
-    executor: docker_executor
-    working_directory: ~/project
+    <<: *prepare_executor_and_working_dir
     steps:
       - checkout
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - run:
-          name: create .env and set env variables
-          command: |
-            echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-            echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-            echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-            echo 'APP_KEY=' > ./backend/.env
-            echo 'APP_ENV=testing' >> ./backend/.env
-            echo 'SESSION_CONNECTION=session' >> ./backend/.env
-            echo 'REDIS_HOST=kvs' >> ./backend/.env
-            echo 'REDIS_PASSWORD=secret' >> ./backend/.env
+      - set_env_vars
       - restore_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}
       - run:
@@ -171,6 +177,108 @@ jobs:
           root: ./circleci-cache
           paths:
             - php-image.tar
+
+  build_nginx:
+    executor: docker_executor
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.18
+          docker_layer_caching: true
+      - set_env_vars
+      - restore_cache:
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}
+      - run:
+          name: load an image from .tar file if cache exists
+          command: |
+            if [[ -e ./circleci-cache/nginx-image.tar ]]; then
+              docker load -i ./circleci-cache/nginx-image.tar
+            fi
+      - run:
+          name: build and save an image if cache does not exist
+          command: |
+            if ! [[ -e ./circleci-cache/nginx-image.tar ]]; then
+              docker-compose build web --no-cache
+              mkdir circleci-cache
+              docker save -o ./circleci-cache/nginx-image.tar dtuj_circleci_web
+            fi                  
+      - save_cache:
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}
+          paths:
+            - ./circleci-cache/nginx-image.tar
+      - persist_to_workspace:
+          root: ./circleci-cache
+          paths:
+            - nginx-image.tar
+  
+  build_mysql:
+    executor: docker_executor
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.18
+          docker_layer_caching: true
+      - set_env_vars
+      - restore_cache:
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/my.cnf" }}
+      - run:
+          name: load an image from .tar file if cache exists
+          command: |
+            if [[ -e ./circleci-cache/mysql-image.tar ]]; then
+              docker load -i ./circleci-cache/mysql-image.tar
+            fi
+      - run:
+          name: build and save an image if cache does not exist
+          command: |
+            if ! [[ -e ./circleci-cache/mysql-image.tar ]]; then
+              docker-compose build db --no-cache
+              mkdir circleci-cache
+              docker save -o ./circleci-cache/mysql-image.tar dtuj_circleci_db
+            fi                  
+      - save_cache:
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/my.cnf" }}
+          paths:
+            - ./circleci-cache/mysql-image.tar
+      - persist_to_workspace:
+          root: ./circleci-cache
+          paths:
+            - mysql-image.tar
+          
+  build_redis:
+    executor: docker_executor
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.18
+          docker_layer_caching: true
+      - set_env_vars
+      - restore_cache:
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/redis/Dockerfile" }}-{{ checksum "infra/docker/redis/redis.conf" }}
+      - run:
+          name: load an image from .tar file if cache exists
+          command: |
+            if [[ -e ./circleci-cache/redis-image.tar ]]; then
+              docker load -i ./circleci-cache/redis-image.tar
+            fi
+      - run:
+          name: build and save an image if cache does not exist
+          command: |
+            if ! [[ -e ./circleci-cache/redis-image.tar ]]; then
+              docker-compose build kvs --no-cache
+              mkdir circleci-cache
+              docker save -o ./circleci-cache/redis-image.tar dtuj_circleci_kvs
+            fi                  
+      - save_cache:
+          key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/redis/Dockerfile" }}-{{ checksum "infra/docker/redis/redis.conf" }}
+          paths:
+            - ./circleci-cache/redis-image.tar
+      - persist_to_workspace:
+          root: ./circleci-cache
+          paths:
+            - redis-image.tar
       
   tests:
     executor: docker_executor
@@ -180,17 +288,21 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
+      - set_env_vars
       - attach_workspace:
           at: ./circleci-cache
       - run:
           name: just a test
           command: ls -al ./circleci-cache
+      - run:
+          name: load images from image .tar files
+          command: |
+            docker load -i ./circleci-cache/php-image.tar
+            docker load -i ./circleci-cache/nginx-image.tar
+            docker load -i ./circleci-cache/mysql-image.tar
+            docker load -i ./circleci-cache/redis-image.tar
       
-      
-      
-      
-      
-  build_nginx:
+  use_this_later:
     executor: docker_executor
     working_directory: ~/project
     steps:
