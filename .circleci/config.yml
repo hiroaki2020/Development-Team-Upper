@@ -158,7 +158,7 @@ jobs:
       - run:
           name: build and save an image if cache does not exist
           command: |
-            if ![[ -e ./circleci-cache/php-image.tar ]]; then
+            if ! [[ -e ./circleci-cache/php-image.tar ]]; then
               docker-compose build app --no-cache
               mkdir circleci-cache
               docker save -o ./circleci-cache/php-image.tar dtuj_circleci_app
