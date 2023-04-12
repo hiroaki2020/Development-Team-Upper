@@ -47,19 +47,19 @@ workflows:
     jobs:
       - build_php:
           *include_develop_branch
-     # - build_nginx:
-      #    *include_develop_branch
-      #- build_mysql:
-       #   *include_develop_branch
-      #- build_redis:
-       #   *include_develop_branch
+      - build_nginx:
+          *include_develop_branch
+      - build_mysql:
+          *include_develop_branch
+      - build_redis:
+          *include_develop_branch
       - tests:
           <<: *include_develop_branch
           requires:
             - build_php
-            #- build_nginx
-            #- build_mysql
-            #- build_redis
+            - build_nginx
+            - build_mysql
+            - build_redis
 
   #staging:
    # jobs:
