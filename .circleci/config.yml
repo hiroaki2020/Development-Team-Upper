@@ -1,10 +1,16 @@
 version: 2.1
 
-references:
-  include_develop_branch: &include_develop_branch
+anchors:
+  run_on_develop_branch: &run_on_develop_branch
     filters:
       branches:
         only: develop
+  run_on_release_and_hotfix_branches: &run_on_release_and_hotfix_branches
+    filters:
+      branches:
+        only:
+          - /^release-v.*/
+          - /^hotfix-v.*/
   prepare_executor_and_working_dir: &prepare_executor_and_working_dir
     executor: docker_executor
     working_directory: ~/project
@@ -17,7 +23,9 @@ executors:
          #username: $DOCKERHUB_USER
          #password: $DOCKERHUB_PASSWORD
 
-#orbs:
+orbs:
+  aws-cli: circleci/aws-cli@3.1.5
+  aws-ecr: circleci/aws-ecr@8.2.1
 
 commands:
   set_env_vars:
@@ -43,38 +51,74 @@ workflows:
           filters:
             branches:
               ignore: /.*/
-  test:
-    jobs:
-      - build_php:
-          *include_develop_branch
-      - build_nginx:
-          *include_develop_branch
-      - build_mysql:
-          *include_develop_branch
-      - build_redis:
-          *include_develop_branch
-      - tests:
-          <<: *include_develop_branch
-          requires:
-            - build_php
-            - build_nginx
-            - build_mysql
-            - build_redis
+#  test:
+ #   jobs:
+  #    - build_php:
+   #       *run_on_develop_branch
+    #  - build_nginx:
+    #      *run_on_develop_branch
+    #  - build_mysql:
+    #      *run_on_develop_branch
+    #  - build_redis:
+    #      *run_on_develop_branch
+    #  - tests:
+    #      <<: *run_on_develop_branch
+    #      requires:
+    #        - build_php
+    #        - build_nginx
+    #        - build_mysql
+    #        - build_redis
 
-  #staging:
-   # jobs:
+  staging:
+    jobs:
+      - aws-ecr/build-and-push-image:
+          name: build-and-push-php-image
+          aws-access-key-id: $AWS_ACCESS_KEY_ID
+          aws-cli-version: 2.9.4
+          aws-secret-access-key: $AWS_SECRET_ACCESS_KEY
+          create-repo: true
+          dockerfile: Dockerfile
+          executor: aws-ecr/default
+          extra-build-args: '--compress'
+          no-output-timeout: 10m
+          path: ./infra/docker/php
+          platform: linux/amd64
+          public-registry: false
+          push-image: true
+          region: $AWS_DEFAULT_REGION
+          registry-id: $AWS_ACCOUNT_ID
+          repo: DTUJ_app_staging
+          repo-scan-on-push: true
+          set-repo-policy: false
+          skip-when-tags-exist: false
+          source-profile: default
+          tag: latest,$CIRCLE_BRANCH
+          <<: *run_on_develop_branch
+          #<<: *run_on_release_and_hotfix_branches
+      #- build_php:
+       #   *run_on_release_and_hotfix_branches
+      #- build_nginx
+       #   *run_on_release_and_hotfix_branches
+      #- build_mysql
+       #   *run_on_release_and_hotfix_branches
+      #- build_redis
+       #   *run_on_release_and_hotfix_branches
       #- deploy_to_staging:
-       #   filters:
-        #    branches:
-         #     only:
-              #  - /^release-v.*/
-               # - /^hotfix-.*/
+       #   <<: *run_on_release_and_hotfix_branches
+        #  requires:
+         #   - build-and-push-php-image
+          #  - build-and-push-nginx-image
+           # - build-and-push-mysql-image
+           # - build-and-push-redis-image
+           # - build-and-push-xtrabackup-image
   #production:
    # jobs:
       #- deploy_to_production:
        #   filters:
         #    branches:
-         #     only: master
+         #     ignore: /.*/
+            #tags:
+              #only: /^v.*/
 
 jobs:
   local_build:
@@ -332,4 +376,16 @@ jobs:
       - run:
           name: stop containers
           command: docker-compose down
-      
+  
+  deploy_to_staging:
+    executor: aws-cli/default
+    steps:
+      - checkout
+      - aws-cli/setup:
+      - run:
+          name: deploy cloudformation stack to staging env
+          command: |
+            aws cloudformation deploy \
+            --template-file dtuj-cloudformation-stack.yaml \
+            --stack-name DTUJ-Staging
+
