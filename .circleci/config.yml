@@ -377,15 +377,15 @@ jobs:
           name: stop containers
           command: docker-compose down
   
-  deploy_to_staging:
-    executor: aws-cli/default
-    steps:
-      - checkout
-      - aws-cli/setup:
-      - run:
-          name: deploy cloudformation stack to staging env
-          command: |
-            aws cloudformation deploy \
-            --template-file dtuj-cloudformation-stack.yaml \
-            --stack-name DTUJ-Staging
+  #deploy_to_staging:
+   # executor: aws-cli/default
+    #steps:
+     # - checkout
+      #- aws-cli/setup:
+      #- run:
+       #   name: deploy cloudformation stack to staging env
+        #  command: |
+         #   aws cloudformation deploy \
+          #  --template-file dtuj-cloudformation-stack.yaml \
+           # --stack-name DTUJ-Staging
 
