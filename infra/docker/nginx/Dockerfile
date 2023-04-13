@@ -2,7 +2,7 @@ FROM node:15.10.0-alpine3.13 as node
 FROM nginxinc/nginx-unprivileged:1.19.7-alpine
 LABEL maintainer="hiroaki"
 SHELL ["/bin/ash", "-oeux", "pipefail", "-c"]
-
+# This is the line to copy repo into this image for staging and production images
 USER root
 ENV TZ=Asia/Tokyo
 

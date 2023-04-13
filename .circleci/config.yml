@@ -71,8 +71,13 @@ workflows:
 
   staging:
     jobs:
+      - prepare_images:
+          *run_on_develop_branch
+        #<<: *run_on_release_and_hotfix_branches
       - aws-ecr/build-and-push-image:
           name: push_php_image
+          attach-workspace: true
+          workspace-root: ./circleci-images
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-cli-version: 2.9.4
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
@@ -81,7 +86,7 @@ workflows:
           executor: aws-ecr/default
           extra-build-args: '--compress'
           no-output-timeout: 10m
-          path: ./infra/docker/php
+          path: ./circleci-images
           platform: linux/amd64
           public-registry: false
           push-image: true
@@ -95,8 +100,12 @@ workflows:
           tag: latest,$CIRCLE_BRANCH
           <<: *run_on_develop_branch
           #<<: *run_on_release_and_hotfix_branches
+          require:
+            - prepare_images
       - aws-ecr/build-and-push-image:
           name: push_nginx_image
+          attach-workspace: true
+          workspace-root: ./circleci-images
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-cli-version: 2.9.4
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
@@ -105,7 +114,7 @@ workflows:
           executor: aws-ecr/default
           extra-build-args: '--compress'
           no-output-timeout: 10m
-          path: ./infra/docker/nginx
+          path: ./circleci-images
           platform: linux/amd64
           public-registry: false
           push-image: true
@@ -119,6 +128,8 @@ workflows:
           tag: latest,$CIRCLE_BRANCH
           <<: *run_on_develop_branch
           #<<: *run_on_release_and_hotfix_branches
+          require:
+            - prepare_images
       - aws-ecr/build-and-push-image:
           name: push_mysql_image
           aws-access-key-id: AWS_ACCESS_KEY_ID
@@ -464,6 +475,28 @@ jobs:
       - run:
           name: stop containers
           command: docker-compose down
+
+  prepare_images:
+    executor: docker_executor
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.18
+          docker_layer_caching: true
+      - run:
+          name: include repo to app and web server images for staging and production env
+          command: |
+            sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/project\/backend \/work\/backend/' ./infra/docker/php/Dockerfile
+            sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/project\/backend \/work\/backend/' ./infra/docker/nginx/Dockerfile
+      - persist_to_workspace:
+          root: ./infra/docker/php
+          paths:
+            - Dockerfile
+      - persist_to_workspace:
+          root: ./infra/docker/nginx
+          paths:
+            - Dockerfile
   
   #deploy_to_staging:
    # executor: aws-cli/default

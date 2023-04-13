@@ -1,7 +1,7 @@
 FROM php:8.0.2-fpm-buster
 LABEL maintainer="hiroaki"
 SHELL ["/bin/bash", "-oeux", "pipefail", "-c"]
-
+# This is the line to copy repo into this image for staging and production images
 # timezone environment
 ENV TZ=Asia/Tokyo \
   # locale
