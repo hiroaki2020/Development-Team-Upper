@@ -73,9 +73,9 @@ workflows:
     jobs:
       - aws-ecr/build-and-push-image:
           name: build-and-push-php-image
-          aws-access-key-id: ${AWS_ACCESS_KEY_ID}
+          aws-access-key-id: '$AWS_ACCESS_KEY_ID'
           aws-cli-version: 2.9.4
-          aws-secret-access-key: ${AWS_SECRET_ACCESS_KEY}
+          aws-secret-access-key: '$AWS_SECRET_ACCESS_KEY'
           create-repo: true
           dockerfile: Dockerfile
           executor: aws-ecr/default
@@ -85,14 +85,14 @@ workflows:
           platform: linux/amd64
           public-registry: false
           push-image: true
-          region: ${AWS_DEFAULT_REGION}
-          registry-id: ${AWS_ACCOUNT_ID}
+          region: '$AWS_DEFAULT_REGION'
+          registry-id: '$AWS_ACCOUNT_ID'
           repo: DTUJ_app_staging
           repo-scan-on-push: true
           set-repo-policy: false
           skip-when-tags-exist: false
           source-profile: default
-          tag: latest,${CIRCLE_BRANCH}
+          tag: latest,'$CIRCLE_BRANCH'
           <<: *run_on_develop_branch
           #<<: *run_on_release_and_hotfix_branches
       #- build_php:
