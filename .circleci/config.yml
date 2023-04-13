@@ -85,7 +85,7 @@ workflows:
           platform: linux/amd64
           public-registry: false
           push-image: true
-          region: AWS_DEFAULT_REGION
+          region: $AWS_DEFAULT_REGION
           registry-id: AWS_ACCOUNT_ID
           repo: DTUJ_app_staging
           repo-scan-on-push: true
