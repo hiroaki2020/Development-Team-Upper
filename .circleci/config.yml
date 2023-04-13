@@ -42,6 +42,20 @@ commands:
             echo 'SESSION_CONNECTION=session' >> ./backend/.env
             echo 'REDIS_HOST=kvs' >> ./backend/.env
             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
+  set_env_vars_for_staging_env:
+    description: "set env vars for containers"
+    steps:
+      - run:
+          name: create .env and set env variables
+          command: |
+            echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
+            echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
+            echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
+            echo 'APP_KEY=' > ./backend/.env
+            echo 'APP_ENV=testing' >> ./backend/.env
+            echo 'SESSION_CONNECTION=session' >> ./backend/.env
+            echo 'REDIS_HOST=kvs' >> ./backend/.env
+            echo 'REDIS_PASSWORD=secret' >> ./backend/.env
 
 workflows:
   version: 2
@@ -120,7 +134,7 @@ workflows:
           push-image: true
           region: $AWS_DEFAULT_REGION
           registry-id: AWS_ACCOUNT_ID
-          repo: dtuj_app_staging
+          repo: dtuj_web_staging
           repo-scan-on-push: true
           set-repo-policy: false
           skip-when-tags-exist: false
@@ -146,7 +160,7 @@ workflows:
           push-image: true
           region: $AWS_DEFAULT_REGION
           registry-id: AWS_ACCOUNT_ID
-          repo: dtuj_app_staging
+          repo: dtuj_db_staging
           repo-scan-on-push: true
           set-repo-policy: false
           skip-when-tags-exist: false
@@ -170,7 +184,7 @@ workflows:
           push-image: true
           region: $AWS_DEFAULT_REGION
           registry-id: AWS_ACCOUNT_ID
-          repo: dtuj_app_staging
+          repo: dtuj_redis_staging
           repo-scan-on-push: true
           set-repo-policy: false
           skip-when-tags-exist: false
@@ -194,7 +208,7 @@ workflows:
           push-image: true
           region: $AWS_DEFAULT_REGION
           registry-id: AWS_ACCOUNT_ID
-          repo: dtuj_app_staging
+          repo: dtuj_xtrabackup_staging
           repo-scan-on-push: true
           set-repo-policy: false
           skip-when-tags-exist: false
