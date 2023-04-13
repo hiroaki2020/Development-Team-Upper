@@ -100,7 +100,7 @@ workflows:
           tag: latest,$CIRCLE_BRANCH
           <<: *run_on_develop_branch
           #<<: *run_on_release_and_hotfix_branches
-          require:
+          requires:
             - prepare_images
       - aws-ecr/build-and-push-image:
           name: push_nginx_image
@@ -128,7 +128,7 @@ workflows:
           tag: latest,$CIRCLE_BRANCH
           <<: *run_on_develop_branch
           #<<: *run_on_release_and_hotfix_branches
-          require:
+          requires:
             - prepare_images
       - aws-ecr/build-and-push-image:
           name: push_mysql_image
