@@ -489,6 +489,7 @@ jobs:
           command: |
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/php/Dockerfile
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/nginx/Dockerfile
+            mv ./infra/docker/nginx/Dockerfile ./infra/docker/nginx/NginxDockerfile
       - persist_to_workspace:
           root: ./infra/docker/php
           paths:
@@ -496,7 +497,7 @@ jobs:
       - persist_to_workspace:
           root: ./infra/docker/nginx
           paths:
-            - Dockerfile
+            - NginxDockerfile
   
   #deploy_to_staging:
    # executor: aws-cli/default
