@@ -72,7 +72,7 @@ workflows:
   staging:
     jobs:
       - aws-ecr/build-and-push-image:
-          name: build-and-push-php-image
+          name: push_php_image
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-cli-version: 2.9.4
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
@@ -95,22 +95,110 @@ workflows:
           tag: latest,$CIRCLE_BRANCH
           <<: *run_on_develop_branch
           #<<: *run_on_release_and_hotfix_branches
-      #- build_php:
-       #   *run_on_release_and_hotfix_branches
-      #- build_nginx
-       #   *run_on_release_and_hotfix_branches
-      #- build_mysql
-       #   *run_on_release_and_hotfix_branches
-      #- build_redis
-       #   *run_on_release_and_hotfix_branches
+      - aws-ecr/build-and-push-image:
+          name: push_nginx_image
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-cli-version: 2.9.4
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          create-repo: true
+          dockerfile: Dockerfile
+          executor: aws-ecr/default
+          extra-build-args: '--compress'
+          no-output-timeout: 10m
+          path: ./infra/docker/nginx
+          platform: linux/amd64
+          public-registry: false
+          push-image: true
+          region: $AWS_DEFAULT_REGION
+          registry-id: AWS_ACCOUNT_ID
+          repo: dtuj_app_staging
+          repo-scan-on-push: true
+          set-repo-policy: false
+          skip-when-tags-exist: false
+          source-profile: default
+          tag: latest,$CIRCLE_BRANCH
+          <<: *run_on_develop_branch
+          #<<: *run_on_release_and_hotfix_branches
+      - aws-ecr/build-and-push-image:
+          name: push_mysql_image
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-cli-version: 2.9.4
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          create-repo: true
+          dockerfile: Dockerfile
+          executor: aws-ecr/default
+          extra-build-args: '--compress'
+          no-output-timeout: 10m
+          path: ./infra/docker/mysql
+          platform: linux/amd64
+          public-registry: false
+          push-image: true
+          region: $AWS_DEFAULT_REGION
+          registry-id: AWS_ACCOUNT_ID
+          repo: dtuj_app_staging
+          repo-scan-on-push: true
+          set-repo-policy: false
+          skip-when-tags-exist: false
+          source-profile: default
+          tag: latest,$CIRCLE_BRANCH
+          <<: *run_on_develop_branch
+          #<<: *run_on_release_and_hotfix_branches
+      - aws-ecr/build-and-push-image:
+          name: push_redis_image
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-cli-version: 2.9.4
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          create-repo: true
+          dockerfile: Dockerfile
+          executor: aws-ecr/default
+          extra-build-args: '--compress'
+          no-output-timeout: 10m
+          path: ./infra/docker/redis
+          platform: linux/amd64
+          public-registry: false
+          push-image: true
+          region: $AWS_DEFAULT_REGION
+          registry-id: AWS_ACCOUNT_ID
+          repo: dtuj_app_staging
+          repo-scan-on-push: true
+          set-repo-policy: false
+          skip-when-tags-exist: false
+          source-profile: default
+          tag: latest,$CIRCLE_BRANCH
+          <<: *run_on_develop_branch
+          #<<: *run_on_release_and_hotfix_branches
+      - aws-ecr/build-and-push-image:
+          name: push_xtrabackup_image
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-cli-version: 2.9.4
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          create-repo: true
+          dockerfile: Dockerfile
+          executor: aws-ecr/default
+          extra-build-args: '--compress'
+          no-output-timeout: 10m
+          path: ./infra/docker/xtrabackup
+          platform: linux/amd64
+          public-registry: false
+          push-image: true
+          region: $AWS_DEFAULT_REGION
+          registry-id: AWS_ACCOUNT_ID
+          repo: dtuj_app_staging
+          repo-scan-on-push: true
+          set-repo-policy: false
+          skip-when-tags-exist: false
+          source-profile: default
+          tag: latest,$CIRCLE_BRANCH
+          <<: *run_on_develop_branch
+          #<<: *run_on_release_and_hotfix_branches
       #- deploy_to_staging:
        #   <<: *run_on_release_and_hotfix_branches
         #  requires:
-         #   - build-and-push-php-image
-          #  - build-and-push-nginx-image
-           # - build-and-push-mysql-image
-           # - build-and-push-redis-image
-           # - build-and-push-xtrabackup-image
+         #   - push_php_image
+          #  - push_nginx_image
+           # - push_mysql_image
+           # - push_redis_image
+           # - push_xtrabackup_image
   #production:
    # jobs:
       #- deploy_to_production:
