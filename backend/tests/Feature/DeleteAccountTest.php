@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Jetstream\Features;
 use Tests\TestCase;
+use Illuminate\Support\Facades\Storage;
 
 class DeleteAccountTest extends TestCase
 {
@@ -17,6 +18,7 @@ class DeleteAccountTest extends TestCase
             return $this->markTestSkipped('Account deletion is not enabled.');
         }
 
+        Storage::fake('s3-public');
         $this->actingAs($user = User::factory()->create());
 
         $response = $this->delete('/user', [
