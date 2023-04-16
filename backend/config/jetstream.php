@@ -60,6 +60,6 @@ return [
     |
     */
 
-    'profile_photo_disk' => 'public',
+    'profile_photo_disk' => env('APP_ENV') === 'production' || env('APP_ENV') === 'testing' ? 's3-public' : 'public',
 
 ];

@@ -28,31 +28,17 @@ orbs:
   aws-ecr: circleci/aws-ecr@8.2.1
 
 commands:
-  set_env_vars:
-    description: "set env vars for containers"
+  set_env_vars_for_testing_env:
+    description: "set env vars for containers in testing env"
     steps:
       - run:
           name: create .env and set env variables
           command: |
             echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
             echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-            echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
             echo 'APP_KEY=' > ./backend/.env
             echo 'APP_ENV=testing' >> ./backend/.env
-            echo 'SESSION_CONNECTION=session' >> ./backend/.env
-            echo 'REDIS_HOST=kvs' >> ./backend/.env
-            echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-  set_env_vars_for_staging_env:
-    description: "set env vars for containers"
-    steps:
-      - run:
-          name: create .env and set env variables
-          command: |
-            echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-            echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-            echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-            echo 'APP_KEY=' > ./backend/.env
-            echo 'APP_ENV=testing' >> ./backend/.env
+            echo 'APP_DEBUG=true' >> ./backend/.env
             echo 'SESSION_CONNECTION=session' >> ./backend/.env
             echo 'REDIS_HOST=kvs' >> ./backend/.env
             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
@@ -255,6 +241,7 @@ jobs:
             echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
             echo 'APP_KEY=' > ./backend/.env
             echo 'APP_ENV=testing' >> ./backend/.env
+            echo 'APP_DEBUG=true' >> ./backend/.env
             echo 'SESSION_CONNECTION=session' >> ./backend/.env
             echo 'REDIS_HOST=kvs' >> ./backend/.env
             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
@@ -306,7 +293,7 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - set_env_vars
+      - set_env_vars_for_testing_env
       - restore_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}
       - run:
@@ -340,7 +327,7 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - set_env_vars
+      - set_env_vars_for_testing_env
       - restore_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}
       - run:
@@ -374,7 +361,7 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - set_env_vars
+      - set_env_vars_for_testing_env
       - restore_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/my.cnf" }}
       - run:
@@ -408,7 +395,7 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - set_env_vars
+      - set_env_vars_for_testing_env
       - restore_cache:
           key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/redis/Dockerfile" }}-{{ checksum "infra/docker/redis/redis.conf" }}
       - run:
@@ -442,7 +429,7 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - set_env_vars
+      - set_env_vars_for_testing_env
       - attach_workspace:
           at: ./circleci-cache
       - run:
@@ -498,7 +485,32 @@ jobs:
       - setup_remote_docker:
           version: 20.10.18
           docker_layer_caching: true
-      - run: echo $TEST_ENV_VAR > ./test-env-var
+      - run:
+          name: "set env vars for containers in staging env"
+          command: |
+            echo 'APP_NAME=DTUJ' > ./backend/.env
+            echo 'APP_ENV=testing' >> ./backend/.env
+            echo 'APP_KEY=' >> ./backend/.env
+            echo 'APP_DEBUG=true' >> ./backend/.env
+            echo 'LOG_CHANNEL=stack' >> ./backend/.env
+            echo 'LOG_LEVEL=debug' >> ./backend/.env
+            echo 'DB_CONNECTION=mysql' >> ./backend/.env
+            echo 'BROADCAST_DRIVER=pusher' >> ./backend/.env
+            echo 'CACHE_DRIVER=redis' >> ./backend/.env
+            echo 'QUEUE_CONNECTION=redis' >> ./backend/.env
+            echo 'SESSION_DRIVER=redis' >> ./backend/.env
+            echo 'SESSION_LIFETIME=120' >> ./backend/.env
+            echo 'SESSION_CONNECTION=session' >> ./backend/.env
+            echo 'REDIS_HOST=kvs' >> ./backend/.env
+            echo 'REDIS_CLIENT=phpredis' >> ./backend/.env
+            echo 'REDIS_SESSION_DB=0' >> ./backend/.env
+            echo 'REDIS_CACHE_DB=1' >> ./backend/.env
+            echo 'REDIS_QUEUE_DB=2' >> ./backend/.env
+            echo 'REDIS_QUEUE=default' >> ./backend/.env
+      - persist_to_workspace:
+          root: ./infra/docker/php
+          paths:
+            - Dockerfile
       - run:
           name: include repo to app and web server images for staging and production env
           command: |

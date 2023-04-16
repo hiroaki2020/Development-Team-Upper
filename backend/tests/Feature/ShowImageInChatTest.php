@@ -32,7 +32,8 @@ class ShowImageInChatTest extends TestCase
             $user->id,
             $otherUser->id
         ]);
-        Storage::fake('private')->put(
+        
+        Storage::fake('s3')->put(
             'uploads-in-chat',
             $image = UploadedFile::fake()->image('image.jpg')
         );

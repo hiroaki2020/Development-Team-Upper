@@ -1,3 +1,5 @@
+# Orb 'circleci/aws-cli@3.1.5' resolved to 'circleci/aws-cli@3.1.5'
+# Orb 'circleci/aws-ecr@8.2.1' resolved to 'circleci/aws-ecr@8.2.1'
 version: 2
 jobs:
   local_build:
@@ -22,6 +24,7 @@ jobs:
           echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
           echo 'APP_KEY=' > ./backend/.env
           echo 'APP_ENV=testing' >> ./backend/.env
+          echo 'APP_DEBUG=true' >> ./backend/.env
           echo 'SESSION_CONNECTION=session' >> ./backend/.env
           echo 'REDIS_HOST=kvs' >> ./backend/.env
           echo 'REDIS_PASSWORD=secret' >> ./backend/.env
@@ -65,7 +68,7 @@ jobs:
     - run:
         name: stop containers
         command: docker-compose down
-  build_php:
+  prepare_images:
     docker:
     - image: cimg/base:2023.03
     working_directory: ~/project
@@ -75,554 +78,1284 @@ jobs:
         version: 20.10.18
         docker_layer_caching: true
     - run:
-        name: create .env and set env variables
+        name: set env vars for containers in staging env
         command: |
-          echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-          echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-          echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-          echo 'APP_KEY=' > ./backend/.env
+          echo 'APP_NAME=DTUJ' > ./backend/.env
           echo 'APP_ENV=testing' >> ./backend/.env
+          echo 'APP_KEY=' >> ./backend/.env
+          echo 'APP_DEBUG=true' >> ./backend/.env
+          echo 'LOG_CHANNEL=stack' >> ./backend/.env
+          echo 'LOG_LEVEL=debug' >> ./backend/.env
+          echo 'DB_CONNECTION=mysql' >> ./backend/.env
+          echo 'BROADCAST_DRIVER=pusher' >> ./backend/.env
+          echo 'CACHE_DRIVER=redis' >> ./backend/.env
+          echo 'QUEUE_CONNECTION=redis' >> ./backend/.env
+          echo 'SESSION_DRIVER=redis' >> ./backend/.env
+          echo 'SESSION_LIFETIME=120' >> ./backend/.env
           echo 'SESSION_CONNECTION=session' >> ./backend/.env
           echo 'REDIS_HOST=kvs' >> ./backend/.env
-          echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-    - restore_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}
-    - run:
-        name: load an image from .tar file if cache exists
-        command: |
-          if [[ -e ./circleci-cache/php-image.tar ]]; then
-            docker load -i ./circleci-cache/php-image.tar
-          fi
-    - run:
-        name: build and save an image if cache does not exist
-        command: "if ! [[ -e ./circleci-cache/php-image.tar ]]; then\n  docker-compose build app --no-cache\n  mkdir circleci-cache\n  docker save -o ./circleci-cache/php-image.tar dtuj_circleci_app\nfi                  \n"
-    - save_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/php/Dockerfile" }}-{{ checksum "infra/docker/php/php.ini" }}-{{ checksum "infra/docker/php/php-fpm.d/zzz-www.conf" }}
-        paths:
-        - ./circleci-cache/php-image.tar
+          echo 'REDIS_CLIENT=phpredis' >> ./backend/.env
+          echo 'REDIS_SESSION_DB=0' >> ./backend/.env
+          echo 'REDIS_CACHE_DB=1' >> ./backend/.env
+          echo 'REDIS_QUEUE_DB=2' >> ./backend/.env
+          echo 'REDIS_QUEUE=default' >> ./backend/.env
+          echo
     - persist_to_workspace:
-        root: ./circleci-cache
+        root: ./infra/docker/php
         paths:
-        - php-image.tar
-  build_nginx:
-    docker:
-    - image: cimg/base:2023.03
-    working_directory: ~/project
-    steps:
-    - checkout
-    - setup_remote_docker:
-        version: 20.10.18
-        docker_layer_caching: true
+        - Dockerfile
     - run:
-        name: create .env and set env variables
+        name: include repo to app and web server images for staging and production env
         command: |
-          echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-          echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-          echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-          echo 'APP_KEY=' > ./backend/.env
-          echo 'APP_ENV=testing' >> ./backend/.env
-          echo 'SESSION_CONNECTION=session' >> ./backend/.env
-          echo 'REDIS_HOST=kvs' >> ./backend/.env
-          echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-    - restore_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}
-    - run:
-        name: load an image from .tar file if cache exists
-        command: |
-          if [[ -e ./circleci-cache/nginx-image.tar ]]; then
-            docker load -i ./circleci-cache/nginx-image.tar
-          fi
-    - run:
-        name: build and save an image if cache does not exist
-        command: "if ! [[ -e ./circleci-cache/nginx-image.tar ]]; then\n  docker-compose build web --no-cache\n  mkdir circleci-cache\n  docker save -o ./circleci-cache/nginx-image.tar dtuj_circleci_web\nfi                  \n"
-    - save_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/nginx/Dockerfile" }}-{{ checksum "infra/docker/nginx/default.conf.template" }}
-        paths:
-        - ./circleci-cache/nginx-image.tar
+          sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/php/Dockerfile
+          sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/nginx/Dockerfile
+          mv ./infra/docker/nginx/Dockerfile ./infra/docker/nginx/NginxDockerfile
     - persist_to_workspace:
-        root: ./circleci-cache
+        root: ./infra/docker/php
         paths:
-        - nginx-image.tar
-  build_mysql:
-    docker:
-    - image: cimg/base:2023.03
-    working_directory: ~/project
-    steps:
-    - checkout
-    - setup_remote_docker:
-        version: 20.10.18
-        docker_layer_caching: true
-    - run:
-        name: create .env and set env variables
-        command: |
-          echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-          echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-          echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-          echo 'APP_KEY=' > ./backend/.env
-          echo 'APP_ENV=testing' >> ./backend/.env
-          echo 'SESSION_CONNECTION=session' >> ./backend/.env
-          echo 'REDIS_HOST=kvs' >> ./backend/.env
-          echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-    - restore_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/my.cnf" }}
-    - run:
-        name: load an image from .tar file if cache exists
-        command: |
-          if [[ -e ./circleci-cache/mysql-image.tar ]]; then
-            docker load -i ./circleci-cache/mysql-image.tar
-          fi
-    - run:
-        name: build and save an image if cache does not exist
-        command: "if ! [[ -e ./circleci-cache/mysql-image.tar ]]; then\n  docker-compose build db --no-cache\n  mkdir circleci-cache\n  docker save -o ./circleci-cache/mysql-image.tar dtuj_circleci_db\nfi                  \n"
-    - save_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/mysql/Dockerfile" }}-{{ checksum "infra/docker/mysql/0hourly" }}-{{ checksum "infra/docker/mysql/cron.allow" }}-{{ checksum "infra/docker/mysql/dailyjobs" }}-{{ checksum "infra/docker/mysql/docker-entrypoint-wrapper.sh" }}-{{ checksum "infra/docker/mysql/logrotate.conf" }}-{{ checksum "infra/docker/mysql/my.cnf" }}
-        paths:
-        - ./circleci-cache/mysql-image.tar
+        - Dockerfile
     - persist_to_workspace:
-        root: ./circleci-cache
+        root: ./infra/docker/nginx
         paths:
-        - mysql-image.tar
-  build_redis:
-    docker:
-    - image: cimg/base:2023.03
-    working_directory: ~/project
+        - NginxDockerfile
+  push_php_image:
+    machine:
+      docker_layer_caching: false
+      image: ubuntu-2004:202107-02
+    resource_class: medium
     steps:
     - checkout
-    - setup_remote_docker:
-        version: 20.10.18
-        docker_layer_caching: true
-    - run:
-        name: create .env and set env variables
-        command: |
-          echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-          echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-          echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-          echo 'APP_KEY=' > ./backend/.env
-          echo 'APP_ENV=testing' >> ./backend/.env
-          echo 'SESSION_CONNECTION=session' >> ./backend/.env
-          echo 'REDIS_HOST=kvs' >> ./backend/.env
-          echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-    - restore_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/redis/Dockerfile" }}-{{ checksum "infra/docker/redis/redis.conf" }}
-    - run:
-        name: load an image from .tar file if cache exists
-        command: |
-          if [[ -e ./circleci-cache/redis-image.tar ]]; then
-            docker load -i ./circleci-cache/redis-image.tar
-          fi
-    - run:
-        name: build and save an image if cache does not exist
-        command: "if ! [[ -e ./circleci-cache/redis-image.tar ]]; then\n  docker-compose build kvs --no-cache\n  mkdir circleci-cache\n  docker save -o ./circleci-cache/redis-image.tar dtuj_circleci_kvs\nfi                  \n"
-    - save_cache:
-        key: v1-docker-images-{{ checksum "docker-compose.yml" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "infra/docker/redis/Dockerfile" }}-{{ checksum "infra/docker/redis/redis.conf" }}
-        paths:
-        - ./circleci-cache/redis-image.tar
-    - persist_to_workspace:
-        root: ./circleci-cache
-        paths:
-        - redis-image.tar
-  tests:
-    docker:
-    - image: cimg/base:2023.03
-    working_directory: ~/project
-    steps:
-    - checkout
-    - setup_remote_docker:
-        version: 20.10.18
-        docker_layer_caching: true
-    - run:
-        name: create .env and set env variables
-        command: |
-          echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-          echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-          echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-          echo 'APP_KEY=' > ./backend/.env
-          echo 'APP_ENV=testing' >> ./backend/.env
-          echo 'SESSION_CONNECTION=session' >> ./backend/.env
-          echo 'REDIS_HOST=kvs' >> ./backend/.env
-          echo 'REDIS_PASSWORD=secret' >> ./backend/.env
     - attach_workspace:
-        at: ./circleci-cache
+        at: ~/circleci-images
     - run:
-        name: load images from image .tar files
         command: |
-          docker load -i ./circleci-cache/php-image.tar
-          docker load -i ./circleci-cache/nginx-image.tar
-          docker load -i ./circleci-cache/mysql-image.tar
-          docker load -i ./circleci-cache/redis-image.tar
+          if cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+              if [ "$ID" = 0 ]; then export SUDO=""; else export SUDO="sudo"; fi
+          else
+              if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+          fi
+
+          Install_AWS_CLI() {
+              echo "Installing AWS CLI v2"
+              cd /tmp || exit
+              # Platform check
+              if uname -a | grep "Darwin"; then
+                  export SYS_ENV_PLATFORM=macos
+              elif uname -a | grep "x86_64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_x86
+              elif uname -a | grep "aarch64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_arm
+              elif uname -a | grep "x86_64 Msys"; then
+                  export SYS_ENV_PLATFORM=windows
+              elif cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+                  export SYS_ENV_PLATFORM=linux_alpine
+              else
+                  echo "This platform appears to be unsupported."
+                  uname -a
+                  exit 1
+              fi
+
+              # Install per platform
+              case $SYS_ENV_PLATFORM in
+              linux_x86)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              windows)
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco install awscli --version="$1"
+                  echo "$1"
+                  if echo "$1" | grep "2."; then
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLIV2"' >>"$BASH_ENV"
+                  else
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLI/bin"' >>"$BASH_ENV"
+                  fi
+                  ;;
+              macos)
+                  curl -sSL "https://awscli.amazonaws.com/AWSCLIV2$1.pkg" -o "AWSCLIV2.pkg"
+                  $SUDO installer -pkg AWSCLIV2.pkg -target /
+                  rm AWSCLIV2.pkg
+                  ;;
+              linux_arm)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              linux_alpine)
+                  apk --no-cache add \
+                      binutils \
+                      curl
+
+                  curl -L https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -o /etc/apk/keys/sgerrand.rsa.pub
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-bin-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-i18n-2.34-r0.apk
+
+                  apk add --no-cache \
+                      glibc-2.34-r0.apk \
+                      glibc-bin-2.34-r0.apk \
+                      glibc-i18n-2.34-r0.apk
+
+                  /usr/glibc-compat/bin/localedef -i en_US -f UTF-8 en_US.UTF-8
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+
+                  echo "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip"
+                  unzip awscliv2.zip
+                  aws/install
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              *)
+                  echo "This orb does not currently support your platform. If you believe it should, please consider opening an issue on the GitHub repository:"
+                  echo "https://github.com/CircleCI-Public/aws-cli-orb/issues/new"
+                  exit 1
+                  ;;
+              esac
+              # Toggle AWS Pager
+              if [ "$PARAM_AWS_CLI_DISABLE_PAGER" = 1 ]; then
+                  if [ -z "${AWS_PAGER+x}" ]; then
+                      echo 'export AWS_PAGER=""' >>"$BASH_ENV"
+                      echo "AWS_PAGER is being set to the empty string to disable all output paging for AWS CLI commands."
+                      echo "You can set the 'disable-aws-pager' parameter to 'false' to disable this behavior."
+                  fi
+              fi
+          }
+
+          Uninstall_AWS_CLI() {
+              if uname -a | grep "x86_64 Msys"; then
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco uninstall awscli
+              else
+                  AWS_CLI_PATH=$(command -v aws)
+                  echo "$AWS_CLI_PATH"
+                  if [ -n "$AWS_CLI_PATH" ]; then
+                      EXISTING_AWS_VERSION=$(aws --version)
+                      echo "Uninstalling ${EXISTING_AWS_VERSION}"
+                      # shellcheck disable=SC2012
+                      if [ -L "$AWS_CLI_PATH" ]; then
+                          AWS_SYMLINK_PATH=$(ls -l "$AWS_CLI_PATH" | sed -e 's/.* -> //')
+                      fi
+                      if uname -a | grep "x86_64 Msys"; then export SUDO=""; fi
+                      $SUDO rm -rf "$AWS_CLI_PATH" "$AWS_SYMLINK_PATH" "$HOME/.aws/" "/usr/local/bin/aws" "/usr/local/bin/aws_completer" "/usr/local/aws-cli"
+                  else
+                      echo "No AWS install found"
+                  fi
+              fi
+          }
+
+          if [ ! "$(command -v aws)" ]; then
+              if [ "$PARAM_AWS_CLI_VERSION" = "latest" ]; then
+                  Install_AWS_CLI
+              else
+                  if uname -a | grep "x86_64 Msys"; then
+                      Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+                  else
+                      Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+                  fi
+              fi
+          elif [ "$PARAM_AWS_CLI_OVERRIDE" = 1 ]; then
+              Uninstall_AWS_CLI
+              if uname -a | grep "x86_64 Msys"; then
+                  Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+              else
+                  Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+              fi
+          else
+              echo "AWS CLI is already installed, skipping installation."
+              aws --version
+          fi
+        environment:
+          PARAM_AWS_CLI_BINARY_DIR: /usr/local/bin
+          PARAM_AWS_CLI_DISABLE_PAGER: true
+          PARAM_AWS_CLI_INSTALL_DIR: /usr/local/aws-cli
+          PARAM_AWS_CLI_OVERRIDE: false
+          PARAM_AWS_CLI_VERSION: 2.9.4
+        name: Install AWS CLI - 2.9.4
     - run:
-        name: disable bind mount in docker-compose file
-        command: sed -i -e '/^volumes:/a\  app-bind-mount-dir:' -e '/- \.\/backend:\/work\/backend/s/\.\/backend/app-bind-mount-dir/g' docker-compose.yml
+        command: "#!/bin/sh\nif cat /etc/issue | grep \"Alpine\" >/dev/null 2>&1; then\n    . $BASH_ENV\nfi\n\nPARAM_AWS_CLI_ACCESS_KEY_ID=$(eval echo \"\\$$PARAM_AWS_CLI_ACCESS_KEY_ID\")\nPARAM_AWS_CLI_SECRET_ACCESS_KEY=$(eval echo \"\\$$PARAM_AWS_CLI_SECRET_ACCESS_KEY\")\nPARAM_AWS_CLI_REGION=$(eval echo \"\\$$PARAM_AWS_CLI_REGION\")\n\nif [ -z \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" ] || [ -z \"${PARAM_AWS_CLI_SECRET_ACCESS_KEY}\" ]; then \n    echo \"Cannot configure profile. AWS access key id and AWS secret access key must be provided.\"\n    exit 1\nfi\n\naws configure set aws_access_key_id \\\n    \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\naws configure set aws_secret_access_key \\\n    \"$PARAM_AWS_CLI_SECRET_ACCESS_KEY\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\nif [ -n \"${AWS_SESSION_TOKEN}\" ]; then\n    aws configure set aws_session_token \\\n        \"${AWS_SESSION_TOKEN}\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_DEFAULT_REGION\" = \"1\" ]; then\n    aws configure set default.region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_PROFILE_REGION\" = \"1\" ]; then\n    aws configure set region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n"
+        environment:
+          PARAM_AWS_CLI_ACCESS_KEY_ID: AWS_ACCESS_KEY_ID
+          PARAM_AWS_CLI_CONFIG_DEFAULT_REGION: true
+          PARAM_AWS_CLI_CONFIG_PROFILE_REGION: true
+          PARAM_AWS_CLI_PROFILE_NAME: default
+          PARAM_AWS_CLI_REGION: AWS_DEFAULT_REGION
+          PARAM_AWS_CLI_SECRET_ACCESS_KEY: AWS_SECRET_ACCESS_KEY
+        name: Configure AWS Access Key ID
     - run:
-        name: spin up containers
-        command: docker-compose up -d
-    - run:
-        name: copy data from host to container
-        command: docker cp ./backend/. dtuj_circleci-app-1:/work/backend
-    - run:
-        name: chown backend dir
-        command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
-    - run:
-        name: install composer packages
-        command: docker-compose exec app composer install --no-scripts --no-plugins
-    - run:
-        name: wait until db container is ready
         command: |
-          until docker-compose exec db [ -f /var/lib/mysql-files/mysql-init-complete ] && docker-compose exec db mysqladmin -s ping
-          do
-            sleep 1
-          done
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_VAL_ACCOUNT_URL="${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com"
+          ECR_COMMAND="ecr"
+
+          if [ -z "${!ORB_ENV_REGISTRY_ID}" ]; then
+            echo "The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing."
+            exit 1
+          fi
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              ORB_EVAL_REGION="us-east-1"
+              ORB_VAL_ACCOUNT_URL="public.ecr.aws"
+              ECR_COMMAND="ecr-public"
+          fi
+
+          if [ -n "${ORB_VAL_PROFILE_NAME}" ]; then
+              set -- "$@" --profile "${ORB_VAL_PROFILE_NAME}"
+          fi
+
+          #Shellcheck disable=SC2002
+          if [ -f "$HOME/.docker/config.json" ] && cat ~/.docker/config.json | grep "${ORB_VAL_ACCOUNT_URL}" > /dev/null 2>&1 ; then
+              echo "Credential helper is already installed"
+          else
+              aws "${ECR_COMMAND}" get-login-password --region "${ORB_EVAL_REGION}" "$@" | docker login --username AWS --password-stdin "${ORB_VAL_ACCOUNT_URL}"
+          fi
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+        name: Log into Amazon ECR with profile default
     - run:
-        name: test migration
-        command: docker-compose exec app php artisan migrate
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_EVAL_REPO=$(eval echo "${ORB_EVAL_REPO}")
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              aws ecr-public describe-repositories --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  aws ecr-public create-repository --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-name "${ORB_EVAL_REPO}"
+          else
+              aws ecr describe-repositories --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  if [ "$ORB_VAL_REPO_SCAN_ON_PUSH" == "1" ]; then
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=true
+                  else
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=false
+                  fi
+          fi
+        environment:
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_app_staging
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_REPO_SCAN_ON_PUSH: true
+        name: Create Repository
     - run:
-        name: test rollback and migrate with seeding
-        command: docker-compose exec app php artisan migrate:refresh --seed
+        command: "#!/bin/bash\nORB_EVAL_REGION=$(eval echo \"${ORB_EVAL_REGION}\")\nORB_EVAL_REPO=$(eval echo \"${ORB_EVAL_REPO}\")\nORB_EVAL_TAG=$(eval echo \"${ORB_EVAL_TAG}\")\nORB_EVAL_PATH=$(eval echo \"${ORB_EVAL_PATH}\")\nORB_VAL_ACCOUNT_URL=\"${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com\"\nORB_EVAL_PUBLIC_REGISTRY_ALIAS=$(eval echo \"${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\")\nORB_EVAL_EXTRA_BUILD_ARGS=$(eval echo \"${ORB_EVAL_EXTRA_BUILD_ARGS}\")\nORB_EVAL_BUILD_PATH=$(eval echo \"${ORB_EVAL_BUILD_PATH}\")\nECR_COMMAND=\"ecr\"\nnumber_of_tags_in_ecr=0\n\nIFS=', ' read -ra platform <<<\"${ORB_VAL_PLATFORM}\"\nnumber_of_platforms=\"${#platform[@]}\"\n\nif [ -z \"${!ORB_ENV_REGISTRY_ID}\" ]; then\n  echo \"The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing.\"\n  exit 1\nfi\n\nif [ \"${ORB_VAL_PUBLIC_REGISTRY}\" == \"1\" ]; then\n  ECR_COMMAND=\"ecr-public\"\n  ORB_VAL_ACCOUNT_URL=\"public.ecr.aws/${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\"\nfi\n\nIFS=\",\" read -ra DOCKER_TAGS <<<\"${ORB_EVAL_TAG}\"\nfor tag in \"${DOCKER_TAGS[@]}\"; do\n  if [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" ] || [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"true\" ]; then\n    docker_tag_exists_in_ecr=$(aws \"${ECR_COMMAND}\" describe-images --profile \"${ORB_VAL_PROFILE_NAME}\" --registry-id \"${!ORB_ENV_REGISTRY_ID}\" --region \"${ORB_EVAL_REGION}\" --repository-name \"${ORB_EVAL_REPO}\" --query \"contains(imageDetails[].imageTags[], '${tag}')\")\n    if [ \"${docker_tag_exists_in_ecr}\" = \"true\" ]; then\n      docker pull \"${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\n      number_of_tags_in_ecr=$((number_of_tags_in_ecr += 1))\n    fi\n  fi\n  docker_tag_args=\"${docker_tag_args} -t ${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\ndone\n\nif [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"0\" ] || [[ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" && ${number_of_tags_in_ecr} -lt ${#DOCKER_TAGS[@]} ]]; then\n  if [ \"${ORB_VAL_PUSH_IMAGE}\" == \"1\" ]; then\n    set -- \"$@\" --push\n\n    if [ -n \"${ORB_VAL_LIFECYCLE_POLICY_PATH}\" ]; then\n      aws ecr put-lifecycle-policy \\\n        --repository-name \"${ORB_EVAL_REPO}\" \\\n        --lifecycle-policy-text \"file://${ORB_VAL_LIFECYCLE_POLICY_PATH}\"\n    fi\n\n  else\n    set -- \"$@\" --load\n  fi\n\n  if [ \"${number_of_platforms}\" -gt 1 ]; then\n    # In order to build multi-architecture images, a context with binfmt installed must be used. \n    # However, Docker Layer Caching with multi-architecture builds is not currently supported\n\n    if ! docker context ls | grep builder; then\n      # We need to skip the creation of the builder context if it's already present\n      # otherwise the command will fail when called more than once in the same job.\n      docker context create builder\n      docker run --privileged --rm tonistiigi/binfmt --install all\n      docker --context builder buildx create --use\n    fi\n    context_args=\"--context builder\"\n    echo -e \"\\n \\n WARNING: Docker Layer Caching is currently not supported for multi-architecture image builds. \\n \\n\"\n  fi \n  \n  set -x\n  docker \\\n    ${context_args:+$context_args} \\\n    buildx build \\\n    -f \"${ORB_EVAL_PATH}\"/\"${ORB_VAL_DOCKERFILE}\" \\\n    ${docker_tag_args:+$docker_tag_args} \\\n    --platform \"${ORB_VAL_PLATFORM}\" \\\n    --progress plain \\\n    \"$@\" \\\n    ${ORB_EVAL_EXTRA_BUILD_ARGS:+$ORB_EVAL_EXTRA_BUILD_ARGS} \\\n    \"${ORB_EVAL_BUILD_PATH}\"\n  set +x\n  \nfi\n"
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_BUILD_PATH: .
+          ORB_EVAL_EXTRA_BUILD_ARGS: --compress
+          ORB_EVAL_PATH: ~/circleci-images
+          ORB_EVAL_PUBLIC_REGISTRY_ALIAS: ${AWS_ECR_PUBLIC_REGISTRY_ALIAS}
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_app_staging
+          ORB_EVAL_TAG: latest,$CIRCLE_BRANCH
+          ORB_VAL_DOCKERFILE: Dockerfile
+          ORB_VAL_LIFECYCLE_POLICY_PATH: ''
+          ORB_VAL_PLATFORM: linux/amd64
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_PUSH_IMAGE: true
+          ORB_VAL_SKIP_WHEN_TAGS_EXIST: false
+        name: Build Docker Image with buildx
+        no_output_timeout: 10m
+  push_nginx_image:
+    machine:
+      docker_layer_caching: false
+      image: ubuntu-2004:202107-02
+    resource_class: medium
+    steps:
+    - checkout
+    - attach_workspace:
+        at: ./circleci-images
     - run:
-        name: generate application key for testing codes
-        command: docker-compose exec app php artisan key:generate
+        command: |
+          if cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+              if [ "$ID" = 0 ]; then export SUDO=""; else export SUDO="sudo"; fi
+          else
+              if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+          fi
+
+          Install_AWS_CLI() {
+              echo "Installing AWS CLI v2"
+              cd /tmp || exit
+              # Platform check
+              if uname -a | grep "Darwin"; then
+                  export SYS_ENV_PLATFORM=macos
+              elif uname -a | grep "x86_64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_x86
+              elif uname -a | grep "aarch64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_arm
+              elif uname -a | grep "x86_64 Msys"; then
+                  export SYS_ENV_PLATFORM=windows
+              elif cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+                  export SYS_ENV_PLATFORM=linux_alpine
+              else
+                  echo "This platform appears to be unsupported."
+                  uname -a
+                  exit 1
+              fi
+
+              # Install per platform
+              case $SYS_ENV_PLATFORM in
+              linux_x86)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              windows)
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco install awscli --version="$1"
+                  echo "$1"
+                  if echo "$1" | grep "2."; then
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLIV2"' >>"$BASH_ENV"
+                  else
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLI/bin"' >>"$BASH_ENV"
+                  fi
+                  ;;
+              macos)
+                  curl -sSL "https://awscli.amazonaws.com/AWSCLIV2$1.pkg" -o "AWSCLIV2.pkg"
+                  $SUDO installer -pkg AWSCLIV2.pkg -target /
+                  rm AWSCLIV2.pkg
+                  ;;
+              linux_arm)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              linux_alpine)
+                  apk --no-cache add \
+                      binutils \
+                      curl
+
+                  curl -L https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -o /etc/apk/keys/sgerrand.rsa.pub
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-bin-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-i18n-2.34-r0.apk
+
+                  apk add --no-cache \
+                      glibc-2.34-r0.apk \
+                      glibc-bin-2.34-r0.apk \
+                      glibc-i18n-2.34-r0.apk
+
+                  /usr/glibc-compat/bin/localedef -i en_US -f UTF-8 en_US.UTF-8
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+
+                  echo "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip"
+                  unzip awscliv2.zip
+                  aws/install
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              *)
+                  echo "This orb does not currently support your platform. If you believe it should, please consider opening an issue on the GitHub repository:"
+                  echo "https://github.com/CircleCI-Public/aws-cli-orb/issues/new"
+                  exit 1
+                  ;;
+              esac
+              # Toggle AWS Pager
+              if [ "$PARAM_AWS_CLI_DISABLE_PAGER" = 1 ]; then
+                  if [ -z "${AWS_PAGER+x}" ]; then
+                      echo 'export AWS_PAGER=""' >>"$BASH_ENV"
+                      echo "AWS_PAGER is being set to the empty string to disable all output paging for AWS CLI commands."
+                      echo "You can set the 'disable-aws-pager' parameter to 'false' to disable this behavior."
+                  fi
+              fi
+          }
+
+          Uninstall_AWS_CLI() {
+              if uname -a | grep "x86_64 Msys"; then
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco uninstall awscli
+              else
+                  AWS_CLI_PATH=$(command -v aws)
+                  echo "$AWS_CLI_PATH"
+                  if [ -n "$AWS_CLI_PATH" ]; then
+                      EXISTING_AWS_VERSION=$(aws --version)
+                      echo "Uninstalling ${EXISTING_AWS_VERSION}"
+                      # shellcheck disable=SC2012
+                      if [ -L "$AWS_CLI_PATH" ]; then
+                          AWS_SYMLINK_PATH=$(ls -l "$AWS_CLI_PATH" | sed -e 's/.* -> //')
+                      fi
+                      if uname -a | grep "x86_64 Msys"; then export SUDO=""; fi
+                      $SUDO rm -rf "$AWS_CLI_PATH" "$AWS_SYMLINK_PATH" "$HOME/.aws/" "/usr/local/bin/aws" "/usr/local/bin/aws_completer" "/usr/local/aws-cli"
+                  else
+                      echo "No AWS install found"
+                  fi
+              fi
+          }
+
+          if [ ! "$(command -v aws)" ]; then
+              if [ "$PARAM_AWS_CLI_VERSION" = "latest" ]; then
+                  Install_AWS_CLI
+              else
+                  if uname -a | grep "x86_64 Msys"; then
+                      Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+                  else
+                      Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+                  fi
+              fi
+          elif [ "$PARAM_AWS_CLI_OVERRIDE" = 1 ]; then
+              Uninstall_AWS_CLI
+              if uname -a | grep "x86_64 Msys"; then
+                  Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+              else
+                  Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+              fi
+          else
+              echo "AWS CLI is already installed, skipping installation."
+              aws --version
+          fi
+        environment:
+          PARAM_AWS_CLI_BINARY_DIR: /usr/local/bin
+          PARAM_AWS_CLI_DISABLE_PAGER: true
+          PARAM_AWS_CLI_INSTALL_DIR: /usr/local/aws-cli
+          PARAM_AWS_CLI_OVERRIDE: false
+          PARAM_AWS_CLI_VERSION: 2.9.4
+        name: Install AWS CLI - 2.9.4
     - run:
-        name: test codes
-        command: docker-compose exec app php artisan test
+        command: "#!/bin/sh\nif cat /etc/issue | grep \"Alpine\" >/dev/null 2>&1; then\n    . $BASH_ENV\nfi\n\nPARAM_AWS_CLI_ACCESS_KEY_ID=$(eval echo \"\\$$PARAM_AWS_CLI_ACCESS_KEY_ID\")\nPARAM_AWS_CLI_SECRET_ACCESS_KEY=$(eval echo \"\\$$PARAM_AWS_CLI_SECRET_ACCESS_KEY\")\nPARAM_AWS_CLI_REGION=$(eval echo \"\\$$PARAM_AWS_CLI_REGION\")\n\nif [ -z \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" ] || [ -z \"${PARAM_AWS_CLI_SECRET_ACCESS_KEY}\" ]; then \n    echo \"Cannot configure profile. AWS access key id and AWS secret access key must be provided.\"\n    exit 1\nfi\n\naws configure set aws_access_key_id \\\n    \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\naws configure set aws_secret_access_key \\\n    \"$PARAM_AWS_CLI_SECRET_ACCESS_KEY\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\nif [ -n \"${AWS_SESSION_TOKEN}\" ]; then\n    aws configure set aws_session_token \\\n        \"${AWS_SESSION_TOKEN}\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_DEFAULT_REGION\" = \"1\" ]; then\n    aws configure set default.region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_PROFILE_REGION\" = \"1\" ]; then\n    aws configure set region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n"
+        environment:
+          PARAM_AWS_CLI_ACCESS_KEY_ID: AWS_ACCESS_KEY_ID
+          PARAM_AWS_CLI_CONFIG_DEFAULT_REGION: true
+          PARAM_AWS_CLI_CONFIG_PROFILE_REGION: true
+          PARAM_AWS_CLI_PROFILE_NAME: default
+          PARAM_AWS_CLI_REGION: AWS_DEFAULT_REGION
+          PARAM_AWS_CLI_SECRET_ACCESS_KEY: AWS_SECRET_ACCESS_KEY
+        name: Configure AWS Access Key ID
     - run:
-        name: stop containers
-        command: docker-compose down
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_VAL_ACCOUNT_URL="${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com"
+          ECR_COMMAND="ecr"
+
+          if [ -z "${!ORB_ENV_REGISTRY_ID}" ]; then
+            echo "The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing."
+            exit 1
+          fi
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              ORB_EVAL_REGION="us-east-1"
+              ORB_VAL_ACCOUNT_URL="public.ecr.aws"
+              ECR_COMMAND="ecr-public"
+          fi
+
+          if [ -n "${ORB_VAL_PROFILE_NAME}" ]; then
+              set -- "$@" --profile "${ORB_VAL_PROFILE_NAME}"
+          fi
+
+          #Shellcheck disable=SC2002
+          if [ -f "$HOME/.docker/config.json" ] && cat ~/.docker/config.json | grep "${ORB_VAL_ACCOUNT_URL}" > /dev/null 2>&1 ; then
+              echo "Credential helper is already installed"
+          else
+              aws "${ECR_COMMAND}" get-login-password --region "${ORB_EVAL_REGION}" "$@" | docker login --username AWS --password-stdin "${ORB_VAL_ACCOUNT_URL}"
+          fi
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+        name: Log into Amazon ECR with profile default
+    - run:
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_EVAL_REPO=$(eval echo "${ORB_EVAL_REPO}")
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              aws ecr-public describe-repositories --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  aws ecr-public create-repository --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-name "${ORB_EVAL_REPO}"
+          else
+              aws ecr describe-repositories --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  if [ "$ORB_VAL_REPO_SCAN_ON_PUSH" == "1" ]; then
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=true
+                  else
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=false
+                  fi
+          fi
+        environment:
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_web_staging
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_REPO_SCAN_ON_PUSH: true
+        name: Create Repository
+    - run:
+        command: "#!/bin/bash\nORB_EVAL_REGION=$(eval echo \"${ORB_EVAL_REGION}\")\nORB_EVAL_REPO=$(eval echo \"${ORB_EVAL_REPO}\")\nORB_EVAL_TAG=$(eval echo \"${ORB_EVAL_TAG}\")\nORB_EVAL_PATH=$(eval echo \"${ORB_EVAL_PATH}\")\nORB_VAL_ACCOUNT_URL=\"${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com\"\nORB_EVAL_PUBLIC_REGISTRY_ALIAS=$(eval echo \"${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\")\nORB_EVAL_EXTRA_BUILD_ARGS=$(eval echo \"${ORB_EVAL_EXTRA_BUILD_ARGS}\")\nORB_EVAL_BUILD_PATH=$(eval echo \"${ORB_EVAL_BUILD_PATH}\")\nECR_COMMAND=\"ecr\"\nnumber_of_tags_in_ecr=0\n\nIFS=', ' read -ra platform <<<\"${ORB_VAL_PLATFORM}\"\nnumber_of_platforms=\"${#platform[@]}\"\n\nif [ -z \"${!ORB_ENV_REGISTRY_ID}\" ]; then\n  echo \"The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing.\"\n  exit 1\nfi\n\nif [ \"${ORB_VAL_PUBLIC_REGISTRY}\" == \"1\" ]; then\n  ECR_COMMAND=\"ecr-public\"\n  ORB_VAL_ACCOUNT_URL=\"public.ecr.aws/${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\"\nfi\n\nIFS=\",\" read -ra DOCKER_TAGS <<<\"${ORB_EVAL_TAG}\"\nfor tag in \"${DOCKER_TAGS[@]}\"; do\n  if [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" ] || [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"true\" ]; then\n    docker_tag_exists_in_ecr=$(aws \"${ECR_COMMAND}\" describe-images --profile \"${ORB_VAL_PROFILE_NAME}\" --registry-id \"${!ORB_ENV_REGISTRY_ID}\" --region \"${ORB_EVAL_REGION}\" --repository-name \"${ORB_EVAL_REPO}\" --query \"contains(imageDetails[].imageTags[], '${tag}')\")\n    if [ \"${docker_tag_exists_in_ecr}\" = \"true\" ]; then\n      docker pull \"${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\n      number_of_tags_in_ecr=$((number_of_tags_in_ecr += 1))\n    fi\n  fi\n  docker_tag_args=\"${docker_tag_args} -t ${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\ndone\n\nif [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"0\" ] || [[ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" && ${number_of_tags_in_ecr} -lt ${#DOCKER_TAGS[@]} ]]; then\n  if [ \"${ORB_VAL_PUSH_IMAGE}\" == \"1\" ]; then\n    set -- \"$@\" --push\n\n    if [ -n \"${ORB_VAL_LIFECYCLE_POLICY_PATH}\" ]; then\n      aws ecr put-lifecycle-policy \\\n        --repository-name \"${ORB_EVAL_REPO}\" \\\n        --lifecycle-policy-text \"file://${ORB_VAL_LIFECYCLE_POLICY_PATH}\"\n    fi\n\n  else\n    set -- \"$@\" --load\n  fi\n\n  if [ \"${number_of_platforms}\" -gt 1 ]; then\n    # In order to build multi-architecture images, a context with binfmt installed must be used. \n    # However, Docker Layer Caching with multi-architecture builds is not currently supported\n\n    if ! docker context ls | grep builder; then\n      # We need to skip the creation of the builder context if it's already present\n      # otherwise the command will fail when called more than once in the same job.\n      docker context create builder\n      docker run --privileged --rm tonistiigi/binfmt --install all\n      docker --context builder buildx create --use\n    fi\n    context_args=\"--context builder\"\n    echo -e \"\\n \\n WARNING: Docker Layer Caching is currently not supported for multi-architecture image builds. \\n \\n\"\n  fi \n  \n  set -x\n  docker \\\n    ${context_args:+$context_args} \\\n    buildx build \\\n    -f \"${ORB_EVAL_PATH}\"/\"${ORB_VAL_DOCKERFILE}\" \\\n    ${docker_tag_args:+$docker_tag_args} \\\n    --platform \"${ORB_VAL_PLATFORM}\" \\\n    --progress plain \\\n    \"$@\" \\\n    ${ORB_EVAL_EXTRA_BUILD_ARGS:+$ORB_EVAL_EXTRA_BUILD_ARGS} \\\n    \"${ORB_EVAL_BUILD_PATH}\"\n  set +x\n  \nfi\n"
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_BUILD_PATH: .
+          ORB_EVAL_EXTRA_BUILD_ARGS: --compress
+          ORB_EVAL_PATH: ./circleci-images
+          ORB_EVAL_PUBLIC_REGISTRY_ALIAS: ${AWS_ECR_PUBLIC_REGISTRY_ALIAS}
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_web_staging
+          ORB_EVAL_TAG: latest,$CIRCLE_BRANCH
+          ORB_VAL_DOCKERFILE: Dockerfile
+          ORB_VAL_LIFECYCLE_POLICY_PATH: ''
+          ORB_VAL_PLATFORM: linux/amd64
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_PUSH_IMAGE: true
+          ORB_VAL_SKIP_WHEN_TAGS_EXIST: false
+        name: Build Docker Image with buildx
+        no_output_timeout: 10m
+  push_mysql_image:
+    machine:
+      docker_layer_caching: false
+      image: ubuntu-2004:202107-02
+    resource_class: medium
+    steps:
+    - checkout
+    - run:
+        command: |
+          if cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+              if [ "$ID" = 0 ]; then export SUDO=""; else export SUDO="sudo"; fi
+          else
+              if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+          fi
+
+          Install_AWS_CLI() {
+              echo "Installing AWS CLI v2"
+              cd /tmp || exit
+              # Platform check
+              if uname -a | grep "Darwin"; then
+                  export SYS_ENV_PLATFORM=macos
+              elif uname -a | grep "x86_64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_x86
+              elif uname -a | grep "aarch64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_arm
+              elif uname -a | grep "x86_64 Msys"; then
+                  export SYS_ENV_PLATFORM=windows
+              elif cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+                  export SYS_ENV_PLATFORM=linux_alpine
+              else
+                  echo "This platform appears to be unsupported."
+                  uname -a
+                  exit 1
+              fi
+
+              # Install per platform
+              case $SYS_ENV_PLATFORM in
+              linux_x86)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              windows)
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco install awscli --version="$1"
+                  echo "$1"
+                  if echo "$1" | grep "2."; then
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLIV2"' >>"$BASH_ENV"
+                  else
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLI/bin"' >>"$BASH_ENV"
+                  fi
+                  ;;
+              macos)
+                  curl -sSL "https://awscli.amazonaws.com/AWSCLIV2$1.pkg" -o "AWSCLIV2.pkg"
+                  $SUDO installer -pkg AWSCLIV2.pkg -target /
+                  rm AWSCLIV2.pkg
+                  ;;
+              linux_arm)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              linux_alpine)
+                  apk --no-cache add \
+                      binutils \
+                      curl
+
+                  curl -L https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -o /etc/apk/keys/sgerrand.rsa.pub
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-bin-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-i18n-2.34-r0.apk
+
+                  apk add --no-cache \
+                      glibc-2.34-r0.apk \
+                      glibc-bin-2.34-r0.apk \
+                      glibc-i18n-2.34-r0.apk
+
+                  /usr/glibc-compat/bin/localedef -i en_US -f UTF-8 en_US.UTF-8
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+
+                  echo "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip"
+                  unzip awscliv2.zip
+                  aws/install
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              *)
+                  echo "This orb does not currently support your platform. If you believe it should, please consider opening an issue on the GitHub repository:"
+                  echo "https://github.com/CircleCI-Public/aws-cli-orb/issues/new"
+                  exit 1
+                  ;;
+              esac
+              # Toggle AWS Pager
+              if [ "$PARAM_AWS_CLI_DISABLE_PAGER" = 1 ]; then
+                  if [ -z "${AWS_PAGER+x}" ]; then
+                      echo 'export AWS_PAGER=""' >>"$BASH_ENV"
+                      echo "AWS_PAGER is being set to the empty string to disable all output paging for AWS CLI commands."
+                      echo "You can set the 'disable-aws-pager' parameter to 'false' to disable this behavior."
+                  fi
+              fi
+          }
+
+          Uninstall_AWS_CLI() {
+              if uname -a | grep "x86_64 Msys"; then
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco uninstall awscli
+              else
+                  AWS_CLI_PATH=$(command -v aws)
+                  echo "$AWS_CLI_PATH"
+                  if [ -n "$AWS_CLI_PATH" ]; then
+                      EXISTING_AWS_VERSION=$(aws --version)
+                      echo "Uninstalling ${EXISTING_AWS_VERSION}"
+                      # shellcheck disable=SC2012
+                      if [ -L "$AWS_CLI_PATH" ]; then
+                          AWS_SYMLINK_PATH=$(ls -l "$AWS_CLI_PATH" | sed -e 's/.* -> //')
+                      fi
+                      if uname -a | grep "x86_64 Msys"; then export SUDO=""; fi
+                      $SUDO rm -rf "$AWS_CLI_PATH" "$AWS_SYMLINK_PATH" "$HOME/.aws/" "/usr/local/bin/aws" "/usr/local/bin/aws_completer" "/usr/local/aws-cli"
+                  else
+                      echo "No AWS install found"
+                  fi
+              fi
+          }
+
+          if [ ! "$(command -v aws)" ]; then
+              if [ "$PARAM_AWS_CLI_VERSION" = "latest" ]; then
+                  Install_AWS_CLI
+              else
+                  if uname -a | grep "x86_64 Msys"; then
+                      Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+                  else
+                      Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+                  fi
+              fi
+          elif [ "$PARAM_AWS_CLI_OVERRIDE" = 1 ]; then
+              Uninstall_AWS_CLI
+              if uname -a | grep "x86_64 Msys"; then
+                  Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+              else
+                  Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+              fi
+          else
+              echo "AWS CLI is already installed, skipping installation."
+              aws --version
+          fi
+        environment:
+          PARAM_AWS_CLI_BINARY_DIR: /usr/local/bin
+          PARAM_AWS_CLI_DISABLE_PAGER: true
+          PARAM_AWS_CLI_INSTALL_DIR: /usr/local/aws-cli
+          PARAM_AWS_CLI_OVERRIDE: false
+          PARAM_AWS_CLI_VERSION: 2.9.4
+        name: Install AWS CLI - 2.9.4
+    - run:
+        command: "#!/bin/sh\nif cat /etc/issue | grep \"Alpine\" >/dev/null 2>&1; then\n    . $BASH_ENV\nfi\n\nPARAM_AWS_CLI_ACCESS_KEY_ID=$(eval echo \"\\$$PARAM_AWS_CLI_ACCESS_KEY_ID\")\nPARAM_AWS_CLI_SECRET_ACCESS_KEY=$(eval echo \"\\$$PARAM_AWS_CLI_SECRET_ACCESS_KEY\")\nPARAM_AWS_CLI_REGION=$(eval echo \"\\$$PARAM_AWS_CLI_REGION\")\n\nif [ -z \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" ] || [ -z \"${PARAM_AWS_CLI_SECRET_ACCESS_KEY}\" ]; then \n    echo \"Cannot configure profile. AWS access key id and AWS secret access key must be provided.\"\n    exit 1\nfi\n\naws configure set aws_access_key_id \\\n    \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\naws configure set aws_secret_access_key \\\n    \"$PARAM_AWS_CLI_SECRET_ACCESS_KEY\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\nif [ -n \"${AWS_SESSION_TOKEN}\" ]; then\n    aws configure set aws_session_token \\\n        \"${AWS_SESSION_TOKEN}\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_DEFAULT_REGION\" = \"1\" ]; then\n    aws configure set default.region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_PROFILE_REGION\" = \"1\" ]; then\n    aws configure set region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n"
+        environment:
+          PARAM_AWS_CLI_ACCESS_KEY_ID: AWS_ACCESS_KEY_ID
+          PARAM_AWS_CLI_CONFIG_DEFAULT_REGION: true
+          PARAM_AWS_CLI_CONFIG_PROFILE_REGION: true
+          PARAM_AWS_CLI_PROFILE_NAME: default
+          PARAM_AWS_CLI_REGION: AWS_DEFAULT_REGION
+          PARAM_AWS_CLI_SECRET_ACCESS_KEY: AWS_SECRET_ACCESS_KEY
+        name: Configure AWS Access Key ID
+    - run:
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_VAL_ACCOUNT_URL="${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com"
+          ECR_COMMAND="ecr"
+
+          if [ -z "${!ORB_ENV_REGISTRY_ID}" ]; then
+            echo "The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing."
+            exit 1
+          fi
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              ORB_EVAL_REGION="us-east-1"
+              ORB_VAL_ACCOUNT_URL="public.ecr.aws"
+              ECR_COMMAND="ecr-public"
+          fi
+
+          if [ -n "${ORB_VAL_PROFILE_NAME}" ]; then
+              set -- "$@" --profile "${ORB_VAL_PROFILE_NAME}"
+          fi
+
+          #Shellcheck disable=SC2002
+          if [ -f "$HOME/.docker/config.json" ] && cat ~/.docker/config.json | grep "${ORB_VAL_ACCOUNT_URL}" > /dev/null 2>&1 ; then
+              echo "Credential helper is already installed"
+          else
+              aws "${ECR_COMMAND}" get-login-password --region "${ORB_EVAL_REGION}" "$@" | docker login --username AWS --password-stdin "${ORB_VAL_ACCOUNT_URL}"
+          fi
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+        name: Log into Amazon ECR with profile default
+    - run:
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_EVAL_REPO=$(eval echo "${ORB_EVAL_REPO}")
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              aws ecr-public describe-repositories --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  aws ecr-public create-repository --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-name "${ORB_EVAL_REPO}"
+          else
+              aws ecr describe-repositories --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  if [ "$ORB_VAL_REPO_SCAN_ON_PUSH" == "1" ]; then
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=true
+                  else
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=false
+                  fi
+          fi
+        environment:
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_db_staging
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_REPO_SCAN_ON_PUSH: true
+        name: Create Repository
+    - run:
+        command: "#!/bin/bash\nORB_EVAL_REGION=$(eval echo \"${ORB_EVAL_REGION}\")\nORB_EVAL_REPO=$(eval echo \"${ORB_EVAL_REPO}\")\nORB_EVAL_TAG=$(eval echo \"${ORB_EVAL_TAG}\")\nORB_EVAL_PATH=$(eval echo \"${ORB_EVAL_PATH}\")\nORB_VAL_ACCOUNT_URL=\"${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com\"\nORB_EVAL_PUBLIC_REGISTRY_ALIAS=$(eval echo \"${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\")\nORB_EVAL_EXTRA_BUILD_ARGS=$(eval echo \"${ORB_EVAL_EXTRA_BUILD_ARGS}\")\nORB_EVAL_BUILD_PATH=$(eval echo \"${ORB_EVAL_BUILD_PATH}\")\nECR_COMMAND=\"ecr\"\nnumber_of_tags_in_ecr=0\n\nIFS=', ' read -ra platform <<<\"${ORB_VAL_PLATFORM}\"\nnumber_of_platforms=\"${#platform[@]}\"\n\nif [ -z \"${!ORB_ENV_REGISTRY_ID}\" ]; then\n  echo \"The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing.\"\n  exit 1\nfi\n\nif [ \"${ORB_VAL_PUBLIC_REGISTRY}\" == \"1\" ]; then\n  ECR_COMMAND=\"ecr-public\"\n  ORB_VAL_ACCOUNT_URL=\"public.ecr.aws/${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\"\nfi\n\nIFS=\",\" read -ra DOCKER_TAGS <<<\"${ORB_EVAL_TAG}\"\nfor tag in \"${DOCKER_TAGS[@]}\"; do\n  if [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" ] || [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"true\" ]; then\n    docker_tag_exists_in_ecr=$(aws \"${ECR_COMMAND}\" describe-images --profile \"${ORB_VAL_PROFILE_NAME}\" --registry-id \"${!ORB_ENV_REGISTRY_ID}\" --region \"${ORB_EVAL_REGION}\" --repository-name \"${ORB_EVAL_REPO}\" --query \"contains(imageDetails[].imageTags[], '${tag}')\")\n    if [ \"${docker_tag_exists_in_ecr}\" = \"true\" ]; then\n      docker pull \"${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\n      number_of_tags_in_ecr=$((number_of_tags_in_ecr += 1))\n    fi\n  fi\n  docker_tag_args=\"${docker_tag_args} -t ${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\ndone\n\nif [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"0\" ] || [[ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" && ${number_of_tags_in_ecr} -lt ${#DOCKER_TAGS[@]} ]]; then\n  if [ \"${ORB_VAL_PUSH_IMAGE}\" == \"1\" ]; then\n    set -- \"$@\" --push\n\n    if [ -n \"${ORB_VAL_LIFECYCLE_POLICY_PATH}\" ]; then\n      aws ecr put-lifecycle-policy \\\n        --repository-name \"${ORB_EVAL_REPO}\" \\\n        --lifecycle-policy-text \"file://${ORB_VAL_LIFECYCLE_POLICY_PATH}\"\n    fi\n\n  else\n    set -- \"$@\" --load\n  fi\n\n  if [ \"${number_of_platforms}\" -gt 1 ]; then\n    # In order to build multi-architecture images, a context with binfmt installed must be used. \n    # However, Docker Layer Caching with multi-architecture builds is not currently supported\n\n    if ! docker context ls | grep builder; then\n      # We need to skip the creation of the builder context if it's already present\n      # otherwise the command will fail when called more than once in the same job.\n      docker context create builder\n      docker run --privileged --rm tonistiigi/binfmt --install all\n      docker --context builder buildx create --use\n    fi\n    context_args=\"--context builder\"\n    echo -e \"\\n \\n WARNING: Docker Layer Caching is currently not supported for multi-architecture image builds. \\n \\n\"\n  fi \n  \n  set -x\n  docker \\\n    ${context_args:+$context_args} \\\n    buildx build \\\n    -f \"${ORB_EVAL_PATH}\"/\"${ORB_VAL_DOCKERFILE}\" \\\n    ${docker_tag_args:+$docker_tag_args} \\\n    --platform \"${ORB_VAL_PLATFORM}\" \\\n    --progress plain \\\n    \"$@\" \\\n    ${ORB_EVAL_EXTRA_BUILD_ARGS:+$ORB_EVAL_EXTRA_BUILD_ARGS} \\\n    \"${ORB_EVAL_BUILD_PATH}\"\n  set +x\n  \nfi\n"
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_BUILD_PATH: .
+          ORB_EVAL_EXTRA_BUILD_ARGS: --compress
+          ORB_EVAL_PATH: ./infra/docker/mysql
+          ORB_EVAL_PUBLIC_REGISTRY_ALIAS: ${AWS_ECR_PUBLIC_REGISTRY_ALIAS}
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_db_staging
+          ORB_EVAL_TAG: latest,$CIRCLE_BRANCH
+          ORB_VAL_DOCKERFILE: Dockerfile
+          ORB_VAL_LIFECYCLE_POLICY_PATH: ''
+          ORB_VAL_PLATFORM: linux/amd64
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_PUSH_IMAGE: true
+          ORB_VAL_SKIP_WHEN_TAGS_EXIST: false
+        name: Build Docker Image with buildx
+        no_output_timeout: 10m
+  push_redis_image:
+    machine:
+      docker_layer_caching: false
+      image: ubuntu-2004:202107-02
+    resource_class: medium
+    steps:
+    - checkout
+    - run:
+        command: |
+          if cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+              if [ "$ID" = 0 ]; then export SUDO=""; else export SUDO="sudo"; fi
+          else
+              if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+          fi
+
+          Install_AWS_CLI() {
+              echo "Installing AWS CLI v2"
+              cd /tmp || exit
+              # Platform check
+              if uname -a | grep "Darwin"; then
+                  export SYS_ENV_PLATFORM=macos
+              elif uname -a | grep "x86_64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_x86
+              elif uname -a | grep "aarch64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_arm
+              elif uname -a | grep "x86_64 Msys"; then
+                  export SYS_ENV_PLATFORM=windows
+              elif cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+                  export SYS_ENV_PLATFORM=linux_alpine
+              else
+                  echo "This platform appears to be unsupported."
+                  uname -a
+                  exit 1
+              fi
+
+              # Install per platform
+              case $SYS_ENV_PLATFORM in
+              linux_x86)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              windows)
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco install awscli --version="$1"
+                  echo "$1"
+                  if echo "$1" | grep "2."; then
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLIV2"' >>"$BASH_ENV"
+                  else
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLI/bin"' >>"$BASH_ENV"
+                  fi
+                  ;;
+              macos)
+                  curl -sSL "https://awscli.amazonaws.com/AWSCLIV2$1.pkg" -o "AWSCLIV2.pkg"
+                  $SUDO installer -pkg AWSCLIV2.pkg -target /
+                  rm AWSCLIV2.pkg
+                  ;;
+              linux_arm)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              linux_alpine)
+                  apk --no-cache add \
+                      binutils \
+                      curl
+
+                  curl -L https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -o /etc/apk/keys/sgerrand.rsa.pub
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-bin-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-i18n-2.34-r0.apk
+
+                  apk add --no-cache \
+                      glibc-2.34-r0.apk \
+                      glibc-bin-2.34-r0.apk \
+                      glibc-i18n-2.34-r0.apk
+
+                  /usr/glibc-compat/bin/localedef -i en_US -f UTF-8 en_US.UTF-8
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+
+                  echo "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip"
+                  unzip awscliv2.zip
+                  aws/install
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              *)
+                  echo "This orb does not currently support your platform. If you believe it should, please consider opening an issue on the GitHub repository:"
+                  echo "https://github.com/CircleCI-Public/aws-cli-orb/issues/new"
+                  exit 1
+                  ;;
+              esac
+              # Toggle AWS Pager
+              if [ "$PARAM_AWS_CLI_DISABLE_PAGER" = 1 ]; then
+                  if [ -z "${AWS_PAGER+x}" ]; then
+                      echo 'export AWS_PAGER=""' >>"$BASH_ENV"
+                      echo "AWS_PAGER is being set to the empty string to disable all output paging for AWS CLI commands."
+                      echo "You can set the 'disable-aws-pager' parameter to 'false' to disable this behavior."
+                  fi
+              fi
+          }
+
+          Uninstall_AWS_CLI() {
+              if uname -a | grep "x86_64 Msys"; then
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco uninstall awscli
+              else
+                  AWS_CLI_PATH=$(command -v aws)
+                  echo "$AWS_CLI_PATH"
+                  if [ -n "$AWS_CLI_PATH" ]; then
+                      EXISTING_AWS_VERSION=$(aws --version)
+                      echo "Uninstalling ${EXISTING_AWS_VERSION}"
+                      # shellcheck disable=SC2012
+                      if [ -L "$AWS_CLI_PATH" ]; then
+                          AWS_SYMLINK_PATH=$(ls -l "$AWS_CLI_PATH" | sed -e 's/.* -> //')
+                      fi
+                      if uname -a | grep "x86_64 Msys"; then export SUDO=""; fi
+                      $SUDO rm -rf "$AWS_CLI_PATH" "$AWS_SYMLINK_PATH" "$HOME/.aws/" "/usr/local/bin/aws" "/usr/local/bin/aws_completer" "/usr/local/aws-cli"
+                  else
+                      echo "No AWS install found"
+                  fi
+              fi
+          }
+
+          if [ ! "$(command -v aws)" ]; then
+              if [ "$PARAM_AWS_CLI_VERSION" = "latest" ]; then
+                  Install_AWS_CLI
+              else
+                  if uname -a | grep "x86_64 Msys"; then
+                      Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+                  else
+                      Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+                  fi
+              fi
+          elif [ "$PARAM_AWS_CLI_OVERRIDE" = 1 ]; then
+              Uninstall_AWS_CLI
+              if uname -a | grep "x86_64 Msys"; then
+                  Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+              else
+                  Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+              fi
+          else
+              echo "AWS CLI is already installed, skipping installation."
+              aws --version
+          fi
+        environment:
+          PARAM_AWS_CLI_BINARY_DIR: /usr/local/bin
+          PARAM_AWS_CLI_DISABLE_PAGER: true
+          PARAM_AWS_CLI_INSTALL_DIR: /usr/local/aws-cli
+          PARAM_AWS_CLI_OVERRIDE: false
+          PARAM_AWS_CLI_VERSION: 2.9.4
+        name: Install AWS CLI - 2.9.4
+    - run:
+        command: "#!/bin/sh\nif cat /etc/issue | grep \"Alpine\" >/dev/null 2>&1; then\n    . $BASH_ENV\nfi\n\nPARAM_AWS_CLI_ACCESS_KEY_ID=$(eval echo \"\\$$PARAM_AWS_CLI_ACCESS_KEY_ID\")\nPARAM_AWS_CLI_SECRET_ACCESS_KEY=$(eval echo \"\\$$PARAM_AWS_CLI_SECRET_ACCESS_KEY\")\nPARAM_AWS_CLI_REGION=$(eval echo \"\\$$PARAM_AWS_CLI_REGION\")\n\nif [ -z \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" ] || [ -z \"${PARAM_AWS_CLI_SECRET_ACCESS_KEY}\" ]; then \n    echo \"Cannot configure profile. AWS access key id and AWS secret access key must be provided.\"\n    exit 1\nfi\n\naws configure set aws_access_key_id \\\n    \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\naws configure set aws_secret_access_key \\\n    \"$PARAM_AWS_CLI_SECRET_ACCESS_KEY\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\nif [ -n \"${AWS_SESSION_TOKEN}\" ]; then\n    aws configure set aws_session_token \\\n        \"${AWS_SESSION_TOKEN}\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_DEFAULT_REGION\" = \"1\" ]; then\n    aws configure set default.region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_PROFILE_REGION\" = \"1\" ]; then\n    aws configure set region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n"
+        environment:
+          PARAM_AWS_CLI_ACCESS_KEY_ID: AWS_ACCESS_KEY_ID
+          PARAM_AWS_CLI_CONFIG_DEFAULT_REGION: true
+          PARAM_AWS_CLI_CONFIG_PROFILE_REGION: true
+          PARAM_AWS_CLI_PROFILE_NAME: default
+          PARAM_AWS_CLI_REGION: AWS_DEFAULT_REGION
+          PARAM_AWS_CLI_SECRET_ACCESS_KEY: AWS_SECRET_ACCESS_KEY
+        name: Configure AWS Access Key ID
+    - run:
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_VAL_ACCOUNT_URL="${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com"
+          ECR_COMMAND="ecr"
+
+          if [ -z "${!ORB_ENV_REGISTRY_ID}" ]; then
+            echo "The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing."
+            exit 1
+          fi
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              ORB_EVAL_REGION="us-east-1"
+              ORB_VAL_ACCOUNT_URL="public.ecr.aws"
+              ECR_COMMAND="ecr-public"
+          fi
+
+          if [ -n "${ORB_VAL_PROFILE_NAME}" ]; then
+              set -- "$@" --profile "${ORB_VAL_PROFILE_NAME}"
+          fi
+
+          #Shellcheck disable=SC2002
+          if [ -f "$HOME/.docker/config.json" ] && cat ~/.docker/config.json | grep "${ORB_VAL_ACCOUNT_URL}" > /dev/null 2>&1 ; then
+              echo "Credential helper is already installed"
+          else
+              aws "${ECR_COMMAND}" get-login-password --region "${ORB_EVAL_REGION}" "$@" | docker login --username AWS --password-stdin "${ORB_VAL_ACCOUNT_URL}"
+          fi
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+        name: Log into Amazon ECR with profile default
+    - run:
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_EVAL_REPO=$(eval echo "${ORB_EVAL_REPO}")
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              aws ecr-public describe-repositories --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  aws ecr-public create-repository --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-name "${ORB_EVAL_REPO}"
+          else
+              aws ecr describe-repositories --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  if [ "$ORB_VAL_REPO_SCAN_ON_PUSH" == "1" ]; then
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=true
+                  else
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=false
+                  fi
+          fi
+        environment:
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_redis_staging
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_REPO_SCAN_ON_PUSH: true
+        name: Create Repository
+    - run:
+        command: "#!/bin/bash\nORB_EVAL_REGION=$(eval echo \"${ORB_EVAL_REGION}\")\nORB_EVAL_REPO=$(eval echo \"${ORB_EVAL_REPO}\")\nORB_EVAL_TAG=$(eval echo \"${ORB_EVAL_TAG}\")\nORB_EVAL_PATH=$(eval echo \"${ORB_EVAL_PATH}\")\nORB_VAL_ACCOUNT_URL=\"${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com\"\nORB_EVAL_PUBLIC_REGISTRY_ALIAS=$(eval echo \"${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\")\nORB_EVAL_EXTRA_BUILD_ARGS=$(eval echo \"${ORB_EVAL_EXTRA_BUILD_ARGS}\")\nORB_EVAL_BUILD_PATH=$(eval echo \"${ORB_EVAL_BUILD_PATH}\")\nECR_COMMAND=\"ecr\"\nnumber_of_tags_in_ecr=0\n\nIFS=', ' read -ra platform <<<\"${ORB_VAL_PLATFORM}\"\nnumber_of_platforms=\"${#platform[@]}\"\n\nif [ -z \"${!ORB_ENV_REGISTRY_ID}\" ]; then\n  echo \"The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing.\"\n  exit 1\nfi\n\nif [ \"${ORB_VAL_PUBLIC_REGISTRY}\" == \"1\" ]; then\n  ECR_COMMAND=\"ecr-public\"\n  ORB_VAL_ACCOUNT_URL=\"public.ecr.aws/${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\"\nfi\n\nIFS=\",\" read -ra DOCKER_TAGS <<<\"${ORB_EVAL_TAG}\"\nfor tag in \"${DOCKER_TAGS[@]}\"; do\n  if [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" ] || [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"true\" ]; then\n    docker_tag_exists_in_ecr=$(aws \"${ECR_COMMAND}\" describe-images --profile \"${ORB_VAL_PROFILE_NAME}\" --registry-id \"${!ORB_ENV_REGISTRY_ID}\" --region \"${ORB_EVAL_REGION}\" --repository-name \"${ORB_EVAL_REPO}\" --query \"contains(imageDetails[].imageTags[], '${tag}')\")\n    if [ \"${docker_tag_exists_in_ecr}\" = \"true\" ]; then\n      docker pull \"${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\n      number_of_tags_in_ecr=$((number_of_tags_in_ecr += 1))\n    fi\n  fi\n  docker_tag_args=\"${docker_tag_args} -t ${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\ndone\n\nif [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"0\" ] || [[ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" && ${number_of_tags_in_ecr} -lt ${#DOCKER_TAGS[@]} ]]; then\n  if [ \"${ORB_VAL_PUSH_IMAGE}\" == \"1\" ]; then\n    set -- \"$@\" --push\n\n    if [ -n \"${ORB_VAL_LIFECYCLE_POLICY_PATH}\" ]; then\n      aws ecr put-lifecycle-policy \\\n        --repository-name \"${ORB_EVAL_REPO}\" \\\n        --lifecycle-policy-text \"file://${ORB_VAL_LIFECYCLE_POLICY_PATH}\"\n    fi\n\n  else\n    set -- \"$@\" --load\n  fi\n\n  if [ \"${number_of_platforms}\" -gt 1 ]; then\n    # In order to build multi-architecture images, a context with binfmt installed must be used. \n    # However, Docker Layer Caching with multi-architecture builds is not currently supported\n\n    if ! docker context ls | grep builder; then\n      # We need to skip the creation of the builder context if it's already present\n      # otherwise the command will fail when called more than once in the same job.\n      docker context create builder\n      docker run --privileged --rm tonistiigi/binfmt --install all\n      docker --context builder buildx create --use\n    fi\n    context_args=\"--context builder\"\n    echo -e \"\\n \\n WARNING: Docker Layer Caching is currently not supported for multi-architecture image builds. \\n \\n\"\n  fi \n  \n  set -x\n  docker \\\n    ${context_args:+$context_args} \\\n    buildx build \\\n    -f \"${ORB_EVAL_PATH}\"/\"${ORB_VAL_DOCKERFILE}\" \\\n    ${docker_tag_args:+$docker_tag_args} \\\n    --platform \"${ORB_VAL_PLATFORM}\" \\\n    --progress plain \\\n    \"$@\" \\\n    ${ORB_EVAL_EXTRA_BUILD_ARGS:+$ORB_EVAL_EXTRA_BUILD_ARGS} \\\n    \"${ORB_EVAL_BUILD_PATH}\"\n  set +x\n  \nfi\n"
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_BUILD_PATH: .
+          ORB_EVAL_EXTRA_BUILD_ARGS: --compress
+          ORB_EVAL_PATH: ./infra/docker/redis
+          ORB_EVAL_PUBLIC_REGISTRY_ALIAS: ${AWS_ECR_PUBLIC_REGISTRY_ALIAS}
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_redis_staging
+          ORB_EVAL_TAG: latest,$CIRCLE_BRANCH
+          ORB_VAL_DOCKERFILE: Dockerfile
+          ORB_VAL_LIFECYCLE_POLICY_PATH: ''
+          ORB_VAL_PLATFORM: linux/amd64
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_PUSH_IMAGE: true
+          ORB_VAL_SKIP_WHEN_TAGS_EXIST: false
+        name: Build Docker Image with buildx
+        no_output_timeout: 10m
+  push_xtrabackup_image:
+    machine:
+      docker_layer_caching: false
+      image: ubuntu-2004:202107-02
+    resource_class: medium
+    steps:
+    - checkout
+    - run:
+        command: |
+          if cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+              if [ "$ID" = 0 ]; then export SUDO=""; else export SUDO="sudo"; fi
+          else
+              if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+          fi
+
+          Install_AWS_CLI() {
+              echo "Installing AWS CLI v2"
+              cd /tmp || exit
+              # Platform check
+              if uname -a | grep "Darwin"; then
+                  export SYS_ENV_PLATFORM=macos
+              elif uname -a | grep "x86_64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_x86
+              elif uname -a | grep "aarch64 GNU/Linux"; then
+                  export SYS_ENV_PLATFORM=linux_arm
+              elif uname -a | grep "x86_64 Msys"; then
+                  export SYS_ENV_PLATFORM=windows
+              elif cat /etc/issue | grep "Alpine" >/dev/null 2>&1; then
+                  export SYS_ENV_PLATFORM=linux_alpine
+              else
+                  echo "This platform appears to be unsupported."
+                  uname -a
+                  exit 1
+              fi
+
+              # Install per platform
+              case $SYS_ENV_PLATFORM in
+              linux_x86)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              windows)
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco install awscli --version="$1"
+                  echo "$1"
+                  if echo "$1" | grep "2."; then
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLIV2"' >>"$BASH_ENV"
+                  else
+                      echo 'export PATH="${PATH}:/c/Program Files/Amazon/AWSCLI/bin"' >>"$BASH_ENV"
+                  fi
+                  ;;
+              macos)
+                  curl -sSL "https://awscli.amazonaws.com/AWSCLIV2$1.pkg" -o "AWSCLIV2.pkg"
+                  $SUDO installer -pkg AWSCLIV2.pkg -target /
+                  rm AWSCLIV2.pkg
+                  ;;
+              linux_arm)
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64$1.zip" -o "awscliv2.zip"
+                  unzip -q -o awscliv2.zip
+                  $SUDO ./aws/install -i "${PARAM_AWS_CLI_INSTALL_DIR}" -b "${PARAM_AWS_CLI_BINARY_DIR}"
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              linux_alpine)
+                  apk --no-cache add \
+                      binutils \
+                      curl
+
+                  curl -L https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -o /etc/apk/keys/sgerrand.rsa.pub
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-bin-2.34-r0.apk
+                  curl -LO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-i18n-2.34-r0.apk
+
+                  apk add --no-cache \
+                      glibc-2.34-r0.apk \
+                      glibc-bin-2.34-r0.apk \
+                      glibc-i18n-2.34-r0.apk
+
+                  /usr/glibc-compat/bin/localedef -i en_US -f UTF-8 en_US.UTF-8
+                  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip" -o "awscliv2.zip"
+
+                  echo "https://awscli.amazonaws.com/awscli-exe-linux-x86_64$1.zip"
+                  unzip awscliv2.zip
+                  aws/install
+                  rm -r awscliv2.zip ./aws
+                  ;;
+              *)
+                  echo "This orb does not currently support your platform. If you believe it should, please consider opening an issue on the GitHub repository:"
+                  echo "https://github.com/CircleCI-Public/aws-cli-orb/issues/new"
+                  exit 1
+                  ;;
+              esac
+              # Toggle AWS Pager
+              if [ "$PARAM_AWS_CLI_DISABLE_PAGER" = 1 ]; then
+                  if [ -z "${AWS_PAGER+x}" ]; then
+                      echo 'export AWS_PAGER=""' >>"$BASH_ENV"
+                      echo "AWS_PAGER is being set to the empty string to disable all output paging for AWS CLI commands."
+                      echo "You can set the 'disable-aws-pager' parameter to 'false' to disable this behavior."
+                  fi
+              fi
+          }
+
+          Uninstall_AWS_CLI() {
+              if uname -a | grep "x86_64 Msys"; then
+                  if [ ! "$(command -v choco)" ]; then
+                      echo "Chocolatey is required to uninstall AWS"
+                      exit 1
+                  fi
+                  choco uninstall awscli
+              else
+                  AWS_CLI_PATH=$(command -v aws)
+                  echo "$AWS_CLI_PATH"
+                  if [ -n "$AWS_CLI_PATH" ]; then
+                      EXISTING_AWS_VERSION=$(aws --version)
+                      echo "Uninstalling ${EXISTING_AWS_VERSION}"
+                      # shellcheck disable=SC2012
+                      if [ -L "$AWS_CLI_PATH" ]; then
+                          AWS_SYMLINK_PATH=$(ls -l "$AWS_CLI_PATH" | sed -e 's/.* -> //')
+                      fi
+                      if uname -a | grep "x86_64 Msys"; then export SUDO=""; fi
+                      $SUDO rm -rf "$AWS_CLI_PATH" "$AWS_SYMLINK_PATH" "$HOME/.aws/" "/usr/local/bin/aws" "/usr/local/bin/aws_completer" "/usr/local/aws-cli"
+                  else
+                      echo "No AWS install found"
+                  fi
+              fi
+          }
+
+          if [ ! "$(command -v aws)" ]; then
+              if [ "$PARAM_AWS_CLI_VERSION" = "latest" ]; then
+                  Install_AWS_CLI
+              else
+                  if uname -a | grep "x86_64 Msys"; then
+                      Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+                  else
+                      Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+                  fi
+              fi
+          elif [ "$PARAM_AWS_CLI_OVERRIDE" = 1 ]; then
+              Uninstall_AWS_CLI
+              if uname -a | grep "x86_64 Msys"; then
+                  Install_AWS_CLI "${PARAM_AWS_CLI_VERSION}"
+              else
+                  Install_AWS_CLI "-${PARAM_AWS_CLI_VERSION}"
+              fi
+          else
+              echo "AWS CLI is already installed, skipping installation."
+              aws --version
+          fi
+        environment:
+          PARAM_AWS_CLI_BINARY_DIR: /usr/local/bin
+          PARAM_AWS_CLI_DISABLE_PAGER: true
+          PARAM_AWS_CLI_INSTALL_DIR: /usr/local/aws-cli
+          PARAM_AWS_CLI_OVERRIDE: false
+          PARAM_AWS_CLI_VERSION: 2.9.4
+        name: Install AWS CLI - 2.9.4
+    - run:
+        command: "#!/bin/sh\nif cat /etc/issue | grep \"Alpine\" >/dev/null 2>&1; then\n    . $BASH_ENV\nfi\n\nPARAM_AWS_CLI_ACCESS_KEY_ID=$(eval echo \"\\$$PARAM_AWS_CLI_ACCESS_KEY_ID\")\nPARAM_AWS_CLI_SECRET_ACCESS_KEY=$(eval echo \"\\$$PARAM_AWS_CLI_SECRET_ACCESS_KEY\")\nPARAM_AWS_CLI_REGION=$(eval echo \"\\$$PARAM_AWS_CLI_REGION\")\n\nif [ -z \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" ] || [ -z \"${PARAM_AWS_CLI_SECRET_ACCESS_KEY}\" ]; then \n    echo \"Cannot configure profile. AWS access key id and AWS secret access key must be provided.\"\n    exit 1\nfi\n\naws configure set aws_access_key_id \\\n    \"$PARAM_AWS_CLI_ACCESS_KEY_ID\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\naws configure set aws_secret_access_key \\\n    \"$PARAM_AWS_CLI_SECRET_ACCESS_KEY\" \\\n    --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\n\nif [ -n \"${AWS_SESSION_TOKEN}\" ]; then\n    aws configure set aws_session_token \\\n        \"${AWS_SESSION_TOKEN}\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_DEFAULT_REGION\" = \"1\" ]; then\n    aws configure set default.region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n\nif [ \"$PARAM_AWS_CLI_CONFIG_PROFILE_REGION\" = \"1\" ]; then\n    aws configure set region \"$PARAM_AWS_CLI_REGION\" \\\n        --profile \"$PARAM_AWS_CLI_PROFILE_NAME\"\nfi\n"
+        environment:
+          PARAM_AWS_CLI_ACCESS_KEY_ID: AWS_ACCESS_KEY_ID
+          PARAM_AWS_CLI_CONFIG_DEFAULT_REGION: true
+          PARAM_AWS_CLI_CONFIG_PROFILE_REGION: true
+          PARAM_AWS_CLI_PROFILE_NAME: default
+          PARAM_AWS_CLI_REGION: AWS_DEFAULT_REGION
+          PARAM_AWS_CLI_SECRET_ACCESS_KEY: AWS_SECRET_ACCESS_KEY
+        name: Configure AWS Access Key ID
+    - run:
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_VAL_ACCOUNT_URL="${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com"
+          ECR_COMMAND="ecr"
+
+          if [ -z "${!ORB_ENV_REGISTRY_ID}" ]; then
+            echo "The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing."
+            exit 1
+          fi
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              ORB_EVAL_REGION="us-east-1"
+              ORB_VAL_ACCOUNT_URL="public.ecr.aws"
+              ECR_COMMAND="ecr-public"
+          fi
+
+          if [ -n "${ORB_VAL_PROFILE_NAME}" ]; then
+              set -- "$@" --profile "${ORB_VAL_PROFILE_NAME}"
+          fi
+
+          #Shellcheck disable=SC2002
+          if [ -f "$HOME/.docker/config.json" ] && cat ~/.docker/config.json | grep "${ORB_VAL_ACCOUNT_URL}" > /dev/null 2>&1 ; then
+              echo "Credential helper is already installed"
+          else
+              aws "${ECR_COMMAND}" get-login-password --region "${ORB_EVAL_REGION}" "$@" | docker login --username AWS --password-stdin "${ORB_VAL_ACCOUNT_URL}"
+          fi
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+        name: Log into Amazon ECR with profile default
+    - run:
+        command: |
+          #!/bin/bash
+          ORB_EVAL_REGION=$(eval echo "${ORB_EVAL_REGION}")
+          ORB_EVAL_REPO=$(eval echo "${ORB_EVAL_REPO}")
+
+          if [ "$ORB_VAL_PUBLIC_REGISTRY" == "1" ]; then
+              aws ecr-public describe-repositories --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  aws ecr-public create-repository --profile "${ORB_EVAL_PROFILE_NAME}" --region us-east-1 --repository-name "${ORB_EVAL_REPO}"
+          else
+              aws ecr describe-repositories --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-names "${ORB_EVAL_REPO}" >/dev/null 2>&1 ||
+                  if [ "$ORB_VAL_REPO_SCAN_ON_PUSH" == "1" ]; then
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=true
+                  else
+                      aws ecr create-repository --profile "${ORB_VAL_PROFILE_NAME}" --region "${ORB_EVAL_REGION}" --repository-name "${ORB_EVAL_REPO}" --image-scanning-configuration scanOnPush=false
+                  fi
+          fi
+        environment:
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_xtrabackup_staging
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_REPO_SCAN_ON_PUSH: true
+        name: Create Repository
+    - run:
+        command: "#!/bin/bash\nORB_EVAL_REGION=$(eval echo \"${ORB_EVAL_REGION}\")\nORB_EVAL_REPO=$(eval echo \"${ORB_EVAL_REPO}\")\nORB_EVAL_TAG=$(eval echo \"${ORB_EVAL_TAG}\")\nORB_EVAL_PATH=$(eval echo \"${ORB_EVAL_PATH}\")\nORB_VAL_ACCOUNT_URL=\"${!ORB_ENV_REGISTRY_ID}.dkr.ecr.${ORB_EVAL_REGION}.amazonaws.com\"\nORB_EVAL_PUBLIC_REGISTRY_ALIAS=$(eval echo \"${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\")\nORB_EVAL_EXTRA_BUILD_ARGS=$(eval echo \"${ORB_EVAL_EXTRA_BUILD_ARGS}\")\nORB_EVAL_BUILD_PATH=$(eval echo \"${ORB_EVAL_BUILD_PATH}\")\nECR_COMMAND=\"ecr\"\nnumber_of_tags_in_ecr=0\n\nIFS=', ' read -ra platform <<<\"${ORB_VAL_PLATFORM}\"\nnumber_of_platforms=\"${#platform[@]}\"\n\nif [ -z \"${!ORB_ENV_REGISTRY_ID}\" ]; then\n  echo \"The registry ID is not found. Please add the registry ID as an environment variable in CicleCI before continuing.\"\n  exit 1\nfi\n\nif [ \"${ORB_VAL_PUBLIC_REGISTRY}\" == \"1\" ]; then\n  ECR_COMMAND=\"ecr-public\"\n  ORB_VAL_ACCOUNT_URL=\"public.ecr.aws/${ORB_EVAL_PUBLIC_REGISTRY_ALIAS}\"\nfi\n\nIFS=\",\" read -ra DOCKER_TAGS <<<\"${ORB_EVAL_TAG}\"\nfor tag in \"${DOCKER_TAGS[@]}\"; do\n  if [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" ] || [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"true\" ]; then\n    docker_tag_exists_in_ecr=$(aws \"${ECR_COMMAND}\" describe-images --profile \"${ORB_VAL_PROFILE_NAME}\" --registry-id \"${!ORB_ENV_REGISTRY_ID}\" --region \"${ORB_EVAL_REGION}\" --repository-name \"${ORB_EVAL_REPO}\" --query \"contains(imageDetails[].imageTags[], '${tag}')\")\n    if [ \"${docker_tag_exists_in_ecr}\" = \"true\" ]; then\n      docker pull \"${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\n      number_of_tags_in_ecr=$((number_of_tags_in_ecr += 1))\n    fi\n  fi\n  docker_tag_args=\"${docker_tag_args} -t ${ORB_VAL_ACCOUNT_URL}/${ORB_EVAL_REPO}:${tag}\"\ndone\n\nif [ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"0\" ] || [[ \"${ORB_VAL_SKIP_WHEN_TAGS_EXIST}\" = \"1\" && ${number_of_tags_in_ecr} -lt ${#DOCKER_TAGS[@]} ]]; then\n  if [ \"${ORB_VAL_PUSH_IMAGE}\" == \"1\" ]; then\n    set -- \"$@\" --push\n\n    if [ -n \"${ORB_VAL_LIFECYCLE_POLICY_PATH}\" ]; then\n      aws ecr put-lifecycle-policy \\\n        --repository-name \"${ORB_EVAL_REPO}\" \\\n        --lifecycle-policy-text \"file://${ORB_VAL_LIFECYCLE_POLICY_PATH}\"\n    fi\n\n  else\n    set -- \"$@\" --load\n  fi\n\n  if [ \"${number_of_platforms}\" -gt 1 ]; then\n    # In order to build multi-architecture images, a context with binfmt installed must be used. \n    # However, Docker Layer Caching with multi-architecture builds is not currently supported\n\n    if ! docker context ls | grep builder; then\n      # We need to skip the creation of the builder context if it's already present\n      # otherwise the command will fail when called more than once in the same job.\n      docker context create builder\n      docker run --privileged --rm tonistiigi/binfmt --install all\n      docker --context builder buildx create --use\n    fi\n    context_args=\"--context builder\"\n    echo -e \"\\n \\n WARNING: Docker Layer Caching is currently not supported for multi-architecture image builds. \\n \\n\"\n  fi \n  \n  set -x\n  docker \\\n    ${context_args:+$context_args} \\\n    buildx build \\\n    -f \"${ORB_EVAL_PATH}\"/\"${ORB_VAL_DOCKERFILE}\" \\\n    ${docker_tag_args:+$docker_tag_args} \\\n    --platform \"${ORB_VAL_PLATFORM}\" \\\n    --progress plain \\\n    \"$@\" \\\n    ${ORB_EVAL_EXTRA_BUILD_ARGS:+$ORB_EVAL_EXTRA_BUILD_ARGS} \\\n    \"${ORB_EVAL_BUILD_PATH}\"\n  set +x\n  \nfi\n"
+        environment:
+          ORB_ENV_REGISTRY_ID: AWS_ACCOUNT_ID
+          ORB_EVAL_BUILD_PATH: .
+          ORB_EVAL_EXTRA_BUILD_ARGS: --compress
+          ORB_EVAL_PATH: ./infra/docker/xtrabackup
+          ORB_EVAL_PUBLIC_REGISTRY_ALIAS: ${AWS_ECR_PUBLIC_REGISTRY_ALIAS}
+          ORB_EVAL_REGION: $AWS_DEFAULT_REGION
+          ORB_EVAL_REPO: dtuj_xtrabackup_staging
+          ORB_EVAL_TAG: latest,$CIRCLE_BRANCH
+          ORB_VAL_DOCKERFILE: Dockerfile
+          ORB_VAL_LIFECYCLE_POLICY_PATH: ''
+          ORB_VAL_PLATFORM: linux/amd64
+          ORB_VAL_PROFILE_NAME: default
+          ORB_VAL_PUBLIC_REGISTRY: false
+          ORB_VAL_PUSH_IMAGE: true
+          ORB_VAL_SKIP_WHEN_TAGS_EXIST: false
+        name: Build Docker Image with buildx
+        no_output_timeout: 10m
 workflows:
   version: 2
-
-# Original config.yml file:
-# version: 2.1
-# 
-# references:
-#   include_develop_branch: &include_develop_branch
-#     filters:
-#       branches:
-#         only: develop
-#   prepare_executor_and_working_dir: &prepare_executor_and_working_dir
-#     executor: docker_executor
-#     working_directory: ~/project
-#     
-# executors:
-#   docker_executor:
-#     docker:
-#       - image: cimg/base:2023.03
-#         #auth:
-#          #username: $DOCKERHUB_USER
-#          #password: $DOCKERHUB_PASSWORD
-# 
-# #orbs:
-# 
-# commands:
-#   set_env_vars:
-#     description: \"set env vars for containers\"
-#     steps:
-#       - run:
-#           name: create .env and set env variables
-#           command: |
-#             echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-#             echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-#             echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-#             echo 'APP_KEY=' > ./backend/.env
-#             echo 'APP_ENV=testing' >> ./backend/.env
-#             echo 'SESSION_CONNECTION=session' >> ./backend/.env
-#             echo 'REDIS_HOST=kvs' >> ./backend/.env
-#             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-# 
-# workflows:
-#   version: 2
-#   local_build:
-#     jobs:
-#       - local_build:
-#           filters:
-#             branches:
-#               ignore: /.*/
-#   test:
-#     jobs:
-#       - build_php:
-#           *include_develop_branch
-#       - build_nginx:
-#           *include_develop_branch
-#       - build_mysql:
-#           *include_develop_branch
-#       - build_redis:
-#           *include_develop_branch
-#       - tests:
-#           <<: *include_develop_branch
-#           requires:
-#             - build_php
-#             - build_nginx
-#             - build_mysql
-#             - build_redis
-# 
-#   #staging:
-#    # jobs:
-#       #- deploy_to_staging:
-#        #   filters:
-#         #    branches:
-#          #     only:
-#               #  - /^release-v.*/
-#                # - /^hotfix-.*/
-#   #production:
-#    # jobs:
-#       #- deploy_to_production:
-#        #   filters:
-#         #    branches:
-#          #     only: master
-# 
-# jobs:
-#   local_build:
-#     executor: docker_executor
-#     working_directory: ~/project
-#     steps:
-#       - checkout
-#       - setup_remote_docker:
-#           version: 20.10.7
-#           docker_layer_caching: false
-#       - run:
-#           name: change docker and docker-compose commands' permissions
-#           command: |
-#             sudo chmod u+s /usr/bin/docker
-#             sudo chmod u+s /usr/local/bin/docker-compose
-#       - run:
-#           name: create .env and set env variables
-#           command: |
-#             echo 'DTUJ_IMAGE_NAME_PREFIX=dtuj_circleci' > ./.env
-#             echo 'COMPOSE_PROJECT_NAME=dtuj_circleci' >> ./.env
-#             echo 'DTUJ_WEB_CONTAINER_HOST_PORT=81' >> ./.env
-#             echo 'APP_KEY=' > ./backend/.env
-#             echo 'APP_ENV=testing' >> ./backend/.env
-#             echo 'SESSION_CONNECTION=session' >> ./backend/.env
-#             echo 'REDIS_HOST=kvs' >> ./backend/.env
-#             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-#       - run:
-#           name: build images
-#           command: docker-compose build --no-cache --force-rm
-#       - run:
-#           name: disable bind mount in docker-compose file
-#           command: sed -i -e '/^volumes:/a\\  app-bind-mount-dir:' -e '/- \\.\\/backend:\\/work\\/backend/s/\\.\\/backend/app-bind-mount-dir/g' docker-compose.yml
-#       - run:
-#           name: spin up containers
-#           command: docker-compose up -d
-#       - run:
-#           name: copy data from host to container
-#           command: docker cp ./backend/. dtuj_circleci-app-1:/work/backend
-#       - run:
-#           name: chown backend dir
-#           command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
-#       - run:
-#           name: install composer packages
-#           command: docker-compose exec app composer install --no-scripts --no-plugins
-#       - run:
-#           name: wait until db container is ready
-#           command: | 
-#             until docker-compose exec db [ -f /var/lib/mysql-files/mysql-init-complete ] && docker-compose exec db mysqladmin -s ping
-#             do
-#               sleep 1
-#             done
-#       - run:
-#           name: test migration
-#           command: docker-compose exec app php artisan migrate
-#       - run:
-#           name: test rollback and migrate with seeding
-#           command: docker-compose exec app php artisan migrate:refresh --seed
-#       - run:
-#           name: generate application key for testing codes
-#           command: docker-compose exec app php artisan key:generate
-#       - run:
-#           name: test codes
-#           command: docker-compose exec app php artisan test
-#       - run:
-#           name: stop containers
-#           command: docker-compose down
-# 
-#   build_php:
-#     <<: *prepare_executor_and_working_dir
-#     steps:
-#       - checkout
-#       - setup_remote_docker:
-#           version: 20.10.18
-#           docker_layer_caching: true
-#       - set_env_vars
-#       - restore_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/php/Dockerfile\" }}-{{ checksum \"infra/docker/php/php.ini\" }}-{{ checksum \"infra/docker/php/php-fpm.d/zzz-www.conf\" }}
-#       - run:
-#           name: load an image from .tar file if cache exists
-#           command: |
-#             if [[ -e ./circleci-cache/php-image.tar ]]; then
-#               docker load -i ./circleci-cache/php-image.tar
-#             fi
-#       - run:
-#           name: build and save an image if cache does not exist
-#           command: |
-#             if ! [[ -e ./circleci-cache/php-image.tar ]]; then
-#               docker-compose build app --no-cache
-#               mkdir circleci-cache
-#               docker save -o ./circleci-cache/php-image.tar dtuj_circleci_app
-#             fi                  
-#       - save_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/php/Dockerfile\" }}-{{ checksum \"infra/docker/php/php.ini\" }}-{{ checksum \"infra/docker/php/php-fpm.d/zzz-www.conf\" }}
-#           paths:
-#             - ./circleci-cache/php-image.tar
-#       - persist_to_workspace:
-#           root: ./circleci-cache
-#           paths:
-#             - php-image.tar
-# 
-#   build_nginx:
-#     executor: docker_executor
-#     working_directory: ~/project
-#     steps:
-#       - checkout
-#       - setup_remote_docker:
-#           version: 20.10.18
-#           docker_layer_caching: true
-#       - set_env_vars
-#       - restore_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/nginx/Dockerfile\" }}-{{ checksum \"infra/docker/nginx/default.conf.template\" }}
-#       - run:
-#           name: load an image from .tar file if cache exists
-#           command: |
-#             if [[ -e ./circleci-cache/nginx-image.tar ]]; then
-#               docker load -i ./circleci-cache/nginx-image.tar
-#             fi
-#       - run:
-#           name: build and save an image if cache does not exist
-#           command: |
-#             if ! [[ -e ./circleci-cache/nginx-image.tar ]]; then
-#               docker-compose build web --no-cache
-#               mkdir circleci-cache
-#               docker save -o ./circleci-cache/nginx-image.tar dtuj_circleci_web
-#             fi                  
-#       - save_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/nginx/Dockerfile\" }}-{{ checksum \"infra/docker/nginx/default.conf.template\" }}
-#           paths:
-#             - ./circleci-cache/nginx-image.tar
-#       - persist_to_workspace:
-#           root: ./circleci-cache
-#           paths:
-#             - nginx-image.tar
-#   
-#   build_mysql:
-#     executor: docker_executor
-#     working_directory: ~/project
-#     steps:
-#       - checkout
-#       - setup_remote_docker:
-#           version: 20.10.18
-#           docker_layer_caching: true
-#       - set_env_vars
-#       - restore_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/mysql/Dockerfile\" }}-{{ checksum \"infra/docker/mysql/0hourly\" }}-{{ checksum \"infra/docker/mysql/cron.allow\" }}-{{ checksum \"infra/docker/mysql/dailyjobs\" }}-{{ checksum \"infra/docker/mysql/docker-entrypoint-wrapper.sh\" }}-{{ checksum \"infra/docker/mysql/logrotate.conf\" }}-{{ checksum \"infra/docker/mysql/my.cnf\" }}
-#       - run:
-#           name: load an image from .tar file if cache exists
-#           command: |
-#             if [[ -e ./circleci-cache/mysql-image.tar ]]; then
-#               docker load -i ./circleci-cache/mysql-image.tar
-#             fi
-#       - run:
-#           name: build and save an image if cache does not exist
-#           command: |
-#             if ! [[ -e ./circleci-cache/mysql-image.tar ]]; then
-#               docker-compose build db --no-cache
-#               mkdir circleci-cache
-#               docker save -o ./circleci-cache/mysql-image.tar dtuj_circleci_db
-#             fi                  
-#       - save_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/mysql/Dockerfile\" }}-{{ checksum \"infra/docker/mysql/0hourly\" }}-{{ checksum \"infra/docker/mysql/cron.allow\" }}-{{ checksum \"infra/docker/mysql/dailyjobs\" }}-{{ checksum \"infra/docker/mysql/docker-entrypoint-wrapper.sh\" }}-{{ checksum \"infra/docker/mysql/logrotate.conf\" }}-{{ checksum \"infra/docker/mysql/my.cnf\" }}
-#           paths:
-#             - ./circleci-cache/mysql-image.tar
-#       - persist_to_workspace:
-#           root: ./circleci-cache
-#           paths:
-#             - mysql-image.tar
-#           
-#   build_redis:
-#     executor: docker_executor
-#     working_directory: ~/project
-#     steps:
-#       - checkout
-#       - setup_remote_docker:
-#           version: 20.10.18
-#           docker_layer_caching: true
-#       - set_env_vars
-#       - restore_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/redis/Dockerfile\" }}-{{ checksum \"infra/docker/redis/redis.conf\" }}
-#       - run:
-#           name: load an image from .tar file if cache exists
-#           command: |
-#             if [[ -e ./circleci-cache/redis-image.tar ]]; then
-#               docker load -i ./circleci-cache/redis-image.tar
-#             fi
-#       - run:
-#           name: build and save an image if cache does not exist
-#           command: |
-#             if ! [[ -e ./circleci-cache/redis-image.tar ]]; then
-#               docker-compose build kvs --no-cache
-#               mkdir circleci-cache
-#               docker save -o ./circleci-cache/redis-image.tar dtuj_circleci_kvs
-#             fi                  
-#       - save_cache:
-#           key: v1-docker-images-{{ checksum \"docker-compose.yml\" }}-{{ checksum \".circleci/config.yml\" }}-{{ checksum \"infra/docker/redis/Dockerfile\" }}-{{ checksum \"infra/docker/redis/redis.conf\" }}
-#           paths:
-#             - ./circleci-cache/redis-image.tar
-#       - persist_to_workspace:
-#           root: ./circleci-cache
-#           paths:
-#             - redis-image.tar
-#       
-#   tests:
-#     executor: docker_executor
-#     working_directory: ~/project
-#     steps:
-#       - checkout
-#       - setup_remote_docker:
-#           version: 20.10.18
-#           docker_layer_caching: true
-#       - set_env_vars
-#       - attach_workspace:
-#           at: ./circleci-cache
-#       - run:
-#           name: load images from image .tar files
-#           command: |
-#             docker load -i ./circleci-cache/php-image.tar
-#             docker load -i ./circleci-cache/nginx-image.tar
-#             docker load -i ./circleci-cache/mysql-image.tar
-#             docker load -i ./circleci-cache/redis-image.tar
-#       - run:
-#           name: disable bind mount in docker-compose file
-#           command: sed -i -e '/^volumes:/a\\  app-bind-mount-dir:' -e '/- \\.\\/backend:\\/work\\/backend/s/\\.\\/backend/app-bind-mount-dir/g' docker-compose.yml
-#       - run:
-#           name: spin up containers
-#           command: docker-compose up -d
-#       - run:
-#           name: copy data from host to container
-#           command: docker cp ./backend/. dtuj_circleci-app-1:/work/backend
-#       - run:
-#           name: chown backend dir
-#           command: docker-compose exec --user root app chown -R dtuj:dtuj /work/backend
-#       - run:
-#           name: install composer packages
-#           command: docker-compose exec app composer install --no-scripts --no-plugins
-#       - run:
-#           name: wait until db container is ready
-#           command: | 
-#             until docker-compose exec db [ -f /var/lib/mysql-files/mysql-init-complete ] && docker-compose exec db mysqladmin -s ping
-#             do
-#               sleep 1
-#             done
-#       - run:
-#           name: test migration
-#           command: docker-compose exec app php artisan migrate
-#       - run:
-#           name: test rollback and migrate with seeding
-#           command: docker-compose exec app php artisan migrate:refresh --seed
-#       - run:
-#           name: generate application key for testing codes
-#           command: docker-compose exec app php artisan key:generate
-#       - run:
-#           name: test codes
-#           command: docker-compose exec app php artisan test
-#       - run:
-#           name: stop containers
-#           command: docker-compose down
-#       

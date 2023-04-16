@@ -6,7 +6,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Jetstream\Features;
 
-trait HasTeamProfilePhoto
+trait HasProfilePhoto
 {
     /**
      * Update the user's profile photo.
@@ -16,10 +16,10 @@ trait HasTeamProfilePhoto
      */
     public function updateProfilePhoto(UploadedFile $photo)
     {
-        tap($this->team_profile_photo_path, function ($previous) use ($photo) {
+        tap($this->profile_photo_path, function ($previous) use ($photo) {
             $this->fill([
-                'team_profile_photo_path' => Storage::disk($this->profilePhotoDisk())
-                    ->put('team-profile-photos', $photo)
+                'profile_photo_path' => Storage::disk($this->profilePhotoDisk())
+                    ->put('profile-photos', $photo)
             ])->save();
 
             if ($previous) {
@@ -29,7 +29,7 @@ trait HasTeamProfilePhoto
     }
 
     /**
-     * Delete the team's profile photo.
+     * Delete the user's profile photo.
      *
      * @return void
      */
@@ -39,22 +39,22 @@ trait HasTeamProfilePhoto
             return;
         }
 
-        Storage::disk($this->profilePhotoDisk())->delete($this->team_profile_photo_path);
+        Storage::disk($this->profilePhotoDisk())->delete($this->profile_photo_path);
 
         $this->fill([
-            'team_profile_photo_path' => null,
+            'profile_photo_path' => null,
         ])->save();
     }
 
     /**
-     * Get the URL to the team's profile photo.
+     * Get the URL to the user's profile photo.
      *
      * @return string
      */
-    public function getTeamProfilePhotoUrlAttribute()
+    public function getProfilePhotoUrlAttribute()
     {
-        return $this->team_profile_photo_path
-                    ? Storage::disk($this->profilePhotoDisk())->url($this->team_profile_photo_path)
+        return $this->profile_photo_path
+                    ? Storage::disk($this->profilePhotoDisk())->url($this->profile_photo_path)
                     : $this->defaultProfilePhotoUrl();
     }
 
@@ -65,7 +65,7 @@ trait HasTeamProfilePhoto
      */
     protected function defaultProfilePhotoUrl()
     {
-        return 'https://ui-avatars.com/api/?name='.urlencode($this->name).'&color=FF934E&background=FFFFC1';
+        return 'https://ui-avatars.com/api/?name='.urlencode($this->name).'&color=7F9CF5&background=EBF4FF';
     }
 
     /**

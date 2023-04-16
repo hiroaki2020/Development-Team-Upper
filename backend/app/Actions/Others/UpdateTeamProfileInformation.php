@@ -27,7 +27,8 @@ class UpdateTeamProfileInformation
         $end = SkillOption::all()->count() -1;
         $acceptable_numbers_of_requirements = range($start, $end);
         $acceptable_numbers_of_options = range($start, $end);
-        $max_number_of_requirements = SkillOption::all()->count() - count($input['options']);
+        $selected_options = $input['options'] ?? [];
+        $max_number_of_requirements = SkillOption::all()->count() - count($selected_options);
         Validator::make($input, [
             '_method' => ['required', 'string', 'in:PUT'],
             'name' => ['required', 'string', 'max:255', new NotInDevCheersTeam, new NotOnlySpaces],

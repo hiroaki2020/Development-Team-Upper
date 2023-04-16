@@ -9,6 +9,8 @@ use App\Models\Message;
 use App\Models\Conversation;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ShowImageValidation;
+use Illuminate\Http\File;
+use Illuminate\Http\UploadedFile;
 
 class ImageController extends Controller
 {
@@ -19,7 +21,10 @@ class ImageController extends Controller
             return false;
         }
 
-        return response()->file(Storage::disk('private')->path($request->image_path));
+        $image_store = config('app.env') === 'production' || config('app.env') === 'testing' ? 's3' : 'private';
+        $image = Storage::disk($image_store)->get($request->image_path);
+
+        return $image;
     }
 
     public function store(ImageInputValidation $request)
@@ -29,9 +34,19 @@ class ImageController extends Controller
         } else {
             return false;
         }
-        $image_path = $request->file('image')->store('uploads-in-chat', 'private');
-        $image = Image::make(Storage::disk('private')->path($image_path))->orientate()->fit(600, 600);
-        $image->save();
+        
+        $image = Image::make($request->image)->orientate()->fit(600, 600)->save();
+        $tmpFile = new File($image->basePath());
+        $file = new UploadedFile(
+            $tmpFile->getPathname(),
+            $tmpFile->getFilename(),
+            $tmpFile->getMimeType(),
+            0,
+            false
+        );
+        $image_store = config('app.env') === 'production' || config('app.env') === 'testing' ? 's3' : 'private';
+        $image_path = Storage::disk($image_store)->put('uploads-in-chat', $file);
+        
         $message = Message::create([
             'sender_id' => (int) $request->sender_id,
             'message' => '[image]',
@@ -44,3 +59,4 @@ class ImageController extends Controller
         return ['chat' => $chat, 'message' => $message];
     }
 }
+
