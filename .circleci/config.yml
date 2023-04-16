@@ -515,7 +515,7 @@ jobs:
           name: include repo to app and web server images for staging and production env
           command: |
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/php/Dockerfile
-            sed -i -e '/^# This is the 2nd line/s/# This is the 2nd line to copy .env into this image for staging and production images/COPY \.\/circleci-images/.env \/work\/backend/.env' ./infra/docker/php/Dockerfile
+            sed -i -e '/^# This is the 2nd line/s/# This is the 2nd line to copy \.env into this image for staging and production images/COPY \.\/circleci-images\/\.env \/work\/backend\/\.env/' ./infra/docker/php/Dockerfile
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/nginx/Dockerfile
             mv ./infra/docker/nginx/Dockerfile ./infra/docker/nginx/NginxDockerfile
       - persist_to_workspace:
