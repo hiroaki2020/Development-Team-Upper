@@ -51,23 +51,23 @@ workflows:
           filters:
             branches:
               ignore: /.*/
-  test:
-    jobs:
-      - build_php:
-          *run_on_develop_branch
-      - build_nginx:
-          *run_on_develop_branch
-      - build_mysql:
-          *run_on_develop_branch
-      - build_redis:
-          *run_on_develop_branch
-      - tests:
-          <<: *run_on_develop_branch
-          requires:
-            - build_php
-            - build_nginx
-            - build_mysql
-            - build_redis
+#  test:
+#    jobs:
+#      - build_php:
+#          *run_on_develop_branch
+#      - build_nginx:
+#          *run_on_develop_branch
+#      - build_mysql:
+#          *run_on_develop_branch
+#      - build_redis:
+#          *run_on_develop_branch
+#      - tests:
+#          <<: *run_on_develop_branch
+#          requires:
+#            - build_php
+#            - build_nginx
+#            - build_mysql
+#            - build_redis
 
   staging:
     jobs:
@@ -508,13 +508,14 @@ jobs:
             echo 'REDIS_QUEUE_DB=2' >> ./backend/.env
             echo 'REDIS_QUEUE=default' >> ./backend/.env
       - persist_to_workspace:
-          root: ./infra/docker/php
+          root: ./backend
           paths:
-            - Dockerfile
+            - .env
       - run:
           name: include repo to app and web server images for staging and production env
           command: |
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/php/Dockerfile
+            sed -i -e '/^# This is the 2nd line/s/# This is the 2nd line to copy .env into this image for staging and production images/COPY \.\/circleci-images/.env \/work\/backend/.env' ./infra/docker/php/Dockerfile
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/nginx/Dockerfile
             mv ./infra/docker/nginx/Dockerfile ./infra/docker/nginx/NginxDockerfile
       - persist_to_workspace:
