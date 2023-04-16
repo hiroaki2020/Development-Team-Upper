@@ -28,6 +28,7 @@ jobs:
           echo 'SESSION_CONNECTION=session' >> ./backend/.env
           echo 'REDIS_HOST=kvs' >> ./backend/.env
           echo 'REDIS_PASSWORD=secret' >> ./backend/.env
+          echo 'AWS_DEFAULT_REGION=ap-northeast-1' >> ./backend/.env
     - run:
         name: build images
         command: docker-compose build --no-cache --force-rm
@@ -99,7 +100,6 @@ jobs:
           echo 'REDIS_CACHE_DB=1' >> ./backend/.env
           echo 'REDIS_QUEUE_DB=2' >> ./backend/.env
           echo 'REDIS_QUEUE=default' >> ./backend/.env
-          echo
     - persist_to_workspace:
         root: ./infra/docker/php
         paths:

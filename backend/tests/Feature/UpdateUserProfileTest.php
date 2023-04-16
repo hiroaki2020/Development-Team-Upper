@@ -21,7 +21,7 @@ class UpdateUserProfileTest extends TestCase
      */
     public function test_user_profile_information_can_be_updated()
     {
-        Storage::fake('public');
+        Storage::fake('s3-public');
         SkillOption::create(['skill' => 'php']);
         $this->actingAs($user = User::factory()->create());
 
@@ -34,7 +34,7 @@ class UpdateUserProfileTest extends TestCase
             'skills' => ['php']
         ]);
 
-        Storage::disk('public')->assertExists('profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('profile-photos/'.$image->hashName());
         $this->assertEquals('Test Name', $user->fresh()->name);
         $this->assertEquals('Hello world!', $user->fresh()->description);
         $this->assertEquals('https://laravel-test.com', $user->fresh()->url);
@@ -50,18 +50,18 @@ class UpdateUserProfileTest extends TestCase
     {
         $this->actingAs($user = User::factory()->create());
 
-        Storage::fake('public')->put(
+        Storage::fake('s3-public')->put(
             'profile-photos',
             $image = UploadedFile::fake()->image('image.jpg')
         );
         $user->forceFill([
             'profile_photo_path' => 'profile-photos/'.$image->hashName()
         ])->save();
-        Storage::disk('public')->assertExists('profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('profile-photos/'.$image->hashName());
 
         $response = $this->delete('/user/profile-photo');
         
-        Storage::disk('public')->assertMissing('profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertMissing('profile-photos/'.$image->hashName());
         $response->assertStatus(303)
                 ->assertSessionHas('status', 'profile-photo-deleted');
     }

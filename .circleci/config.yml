@@ -51,23 +51,23 @@ workflows:
           filters:
             branches:
               ignore: /.*/
-#  test:
- #   jobs:
-  #    - build_php:
-   #       *run_on_develop_branch
-    #  - build_nginx:
-    #      *run_on_develop_branch
-    #  - build_mysql:
-    #      *run_on_develop_branch
-    #  - build_redis:
-    #      *run_on_develop_branch
-    #  - tests:
-    #      <<: *run_on_develop_branch
-    #      requires:
-    #        - build_php
-    #        - build_nginx
-    #        - build_mysql
-    #        - build_redis
+  test:
+    jobs:
+      - build_php:
+          *run_on_develop_branch
+      - build_nginx:
+          *run_on_develop_branch
+      - build_mysql:
+          *run_on_develop_branch
+      - build_redis:
+          *run_on_develop_branch
+      - tests:
+          <<: *run_on_develop_branch
+          requires:
+            - build_php
+            - build_nginx
+            - build_mysql
+            - build_redis
 
   staging:
     jobs:
@@ -245,6 +245,7 @@ jobs:
             echo 'SESSION_CONNECTION=session' >> ./backend/.env
             echo 'REDIS_HOST=kvs' >> ./backend/.env
             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
+            echo 'AWS_DEFAULT_REGION=ap-northeast-1' >> ./backend/.env
       - run:
           name: build images
           command: docker-compose build --no-cache --force-rm

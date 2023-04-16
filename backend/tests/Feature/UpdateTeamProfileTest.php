@@ -21,7 +21,7 @@ class UpdateTeamProfileTest extends TestCase
      */
     public function test_team_owner_can_update_team_profile_information()
     {
-        Storage::fake('public');
+        Storage::fake('s3-public');
         SkillOption::create(['skill' => 'php']);
         SkillOption::create(['skill' => 'laravel']);
         $this->actingAs($user = User::factory()->withTeam()->create());
@@ -39,7 +39,7 @@ class UpdateTeamProfileTest extends TestCase
         ]);
 
         $this->assertCount(1, $user->fresh()->ownedTeams);
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         $this->assertEquals('Test Name', $team->fresh()->name);
         $this->assertEquals('Hello world!', $team->fresh()->description);
         $this->assertEquals(true, $team->fresh()->wanted);
@@ -56,18 +56,18 @@ class UpdateTeamProfileTest extends TestCase
     {
         $this->actingAs($user = User::factory()->withTeam()->create());
 
-        Storage::fake('public')->put(
+        Storage::fake('s3-public')->put(
             'team-profile-photos',
             $image = UploadedFile::fake()->image('image.jpg')
         );
         $user->currentTeam->fill([
             'team_profile_photo_path' => 'team-profile-photos/'.$image->hashName()
         ])->save();
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         
         $response = $this->delete('/team/profile-photo/'.$user->currentTeam->id);
         
-        Storage::disk('public')->assertMissing('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertMissing('team-profile-photos/'.$image->hashName());
         $response->assertStatus(303)
                 ->assertSessionHas('status', 'team-profile-photo-deleted');
     }
@@ -79,7 +79,7 @@ class UpdateTeamProfileTest extends TestCase
      */
     public function test_team_members_in_administrator_role_can_update_team_profile_information()
     {
-        Storage::fake('public');
+        Storage::fake('s3-public');
         SkillOption::create(['skill' => 'php']);
         SkillOption::create(['skill' => 'laravel']);
         $user = User::factory()->withTeam()->create();
@@ -100,7 +100,7 @@ class UpdateTeamProfileTest extends TestCase
         ]);
 
         $this->assertCount(1, $user->fresh()->ownedTeams);
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         $this->assertEquals('Test Name', $team->fresh()->name);
         $this->assertEquals('Hello world!', $team->fresh()->description);
         $this->assertEquals(true, $team->fresh()->wanted);
@@ -122,18 +122,18 @@ class UpdateTeamProfileTest extends TestCase
         $this->actingAs($otherUser = $otherUser->fresh());
         $otherUser->currentTeam;
 
-        Storage::fake('public')->put(
+        Storage::fake('s3-public')->put(
             'team-profile-photos',
             $image = UploadedFile::fake()->image('image.jpg')
         );
         $user->currentTeam->fill([
             'team_profile_photo_path' => 'team-profile-photos/'.$image->hashName()
         ])->save();
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         
         $response = $this->delete('/team/profile-photo/'.$user->currentTeam->id);
         
-        Storage::disk('public')->assertMissing('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertMissing('team-profile-photos/'.$image->hashName());
         $response->assertStatus(303)
                 ->assertSessionHas('status', 'team-profile-photo-deleted');
     }
@@ -145,7 +145,7 @@ class UpdateTeamProfileTest extends TestCase
      */
     public function test_team_members_in_editor_role_can_update_team_profile_information()
     {
-        Storage::fake('public');
+        Storage::fake('s3-public');
         SkillOption::create(['skill' => 'php']);
         SkillOption::create(['skill' => 'laravel']);
         $user = User::factory()->withTeam()->create();
@@ -166,7 +166,7 @@ class UpdateTeamProfileTest extends TestCase
         ]);
 
         $this->assertCount(1, $user->fresh()->ownedTeams);
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         $this->assertEquals('Test Name', $team->fresh()->name);
         $this->assertEquals('Hello world!', $team->fresh()->description);
         $this->assertEquals(true, $team->fresh()->wanted);
@@ -188,18 +188,18 @@ class UpdateTeamProfileTest extends TestCase
         $this->actingAs($otherUser = $otherUser->fresh());
         $otherUser->currentTeam;
 
-        Storage::fake('public')->put(
+        Storage::fake('s3-public')->put(
             'team-profile-photos',
             $image = UploadedFile::fake()->image('image.jpg')
         );
         $user->currentTeam->fill([
             'team_profile_photo_path' => 'team-profile-photos/'.$image->hashName()
         ])->save();
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         
         $response = $this->delete('/team/profile-photo/'.$user->currentTeam->id);
         
-        Storage::disk('public')->assertMissing('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertMissing('team-profile-photos/'.$image->hashName());
         $response->assertStatus(303)
                 ->assertSessionHas('status', 'team-profile-photo-deleted');
     }
@@ -211,7 +211,7 @@ class UpdateTeamProfileTest extends TestCase
      */
     public function test_team_members_in_viewer_role_cant_update_team_profile_information()
     {
-        Storage::fake('public');
+        Storage::fake('s3-public');
         SkillOption::create(['skill' => 'php']);
         SkillOption::create(['skill' => 'laravel']);
         $user = User::factory()->withTeam()->create();
@@ -232,7 +232,7 @@ class UpdateTeamProfileTest extends TestCase
         ]);
 
         $this->assertCount(1, $user->fresh()->ownedTeams);
-        Storage::disk('public')->assertMissing('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertMissing('team-profile-photos/'.$image->hashName());
         $this->assertNotEquals('Test Name', $team->fresh()->name);
         $this->assertNotEquals('Hello world!', $team->fresh()->description);
         $this->assertNotEquals(true, $team->fresh()->wanted);
@@ -254,18 +254,18 @@ class UpdateTeamProfileTest extends TestCase
         $this->actingAs($otherUser = $otherUser->fresh());
         $otherUser->currentTeam;
 
-        Storage::fake('public')->put(
+        Storage::fake('s3-public')->put(
             'team-profile-photos',
             $image = UploadedFile::fake()->image('image.jpg')
         );
         $user->currentTeam->fill([
             'team_profile_photo_path' => 'team-profile-photos/'.$image->hashName()
         ])->save();
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         
         $response = $this->delete('/team/profile-photo/'.$user->currentTeam->id);
         
-        Storage::disk('public')->assertExists('team-profile-photos/'.$image->hashName());
+        Storage::disk('s3-public')->assertExists('team-profile-photos/'.$image->hashName());
         $response->assertStatus(403)
                 ->assertSessionMissing('status');
     }
