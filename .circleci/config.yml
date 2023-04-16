@@ -245,7 +245,6 @@ jobs:
             echo 'SESSION_CONNECTION=session' >> ./backend/.env
             echo 'REDIS_HOST=kvs' >> ./backend/.env
             echo 'REDIS_PASSWORD=secret' >> ./backend/.env
-            echo 'AWS_DEFAULT_REGION=ap-northeast-1' >> ./backend/.env
       - run:
           name: build images
           command: docker-compose build --no-cache --force-rm
