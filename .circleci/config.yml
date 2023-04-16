@@ -486,36 +486,9 @@ jobs:
           version: 20.10.18
           docker_layer_caching: true
       - run:
-          name: "set env vars for containers in staging env"
-          command: |
-            echo 'APP_NAME=DTUJ' > ./backend/.env
-            echo 'APP_ENV=testing' >> ./backend/.env
-            echo 'APP_KEY=' >> ./backend/.env
-            echo 'APP_DEBUG=true' >> ./backend/.env
-            echo 'LOG_CHANNEL=stack' >> ./backend/.env
-            echo 'LOG_LEVEL=debug' >> ./backend/.env
-            echo 'DB_CONNECTION=mysql' >> ./backend/.env
-            echo 'BROADCAST_DRIVER=pusher' >> ./backend/.env
-            echo 'CACHE_DRIVER=redis' >> ./backend/.env
-            echo 'QUEUE_CONNECTION=redis' >> ./backend/.env
-            echo 'SESSION_DRIVER=redis' >> ./backend/.env
-            echo 'SESSION_LIFETIME=120' >> ./backend/.env
-            echo 'SESSION_CONNECTION=session' >> ./backend/.env
-            echo 'REDIS_HOST=kvs' >> ./backend/.env
-            echo 'REDIS_CLIENT=phpredis' >> ./backend/.env
-            echo 'REDIS_SESSION_DB=0' >> ./backend/.env
-            echo 'REDIS_CACHE_DB=1' >> ./backend/.env
-            echo 'REDIS_QUEUE_DB=2' >> ./backend/.env
-            echo 'REDIS_QUEUE=default' >> ./backend/.env
-      - persist_to_workspace:
-          root: ./backend
-          paths:
-            - .env
-      - run:
           name: include repo to app and web server images for staging and production env
           command: |
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/php/Dockerfile
-            sed -i -e '/^# This is the 2nd line/s/# This is the 2nd line to copy \.env into this image for staging and production images/COPY \.\/circleci-images\/\.env \/work\/backend\/\.env/' ./infra/docker/php/Dockerfile
             sed -i -e '/^# This is the line/s/# This is the line to copy repo into this image for staging and production images/COPY \.\/backend \/work\/backend/' ./infra/docker/nginx/Dockerfile
             mv ./infra/docker/nginx/Dockerfile ./infra/docker/nginx/NginxDockerfile
       - persist_to_workspace:
