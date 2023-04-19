@@ -20,5 +20,5 @@ COPY --from=node /opt /opt
 # nginx config file
 COPY ./infra/docker/nginx/*.conf.template /etc/nginx/templates/
 
-WORKDIR /work/backend
 USER nginx
+WORKDIR /work/backend
