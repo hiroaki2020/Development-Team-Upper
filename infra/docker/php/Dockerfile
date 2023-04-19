@@ -34,14 +34,14 @@ RUN apt-get update && \
   delgroup sudo && \
   umask 0027 && \
   mkdir -p /work/backend /composer && \
-  chown dtuj:dtuj /var/run/php-fpm /composer /work && \
+  chown dtuj:dtuj /var/run/php-fpm /composer /work /work/backend && \
   chmod 750 /var/run/php-fpm && \
   chmod 500 /work
 
 COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
 COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
 
-USER dtuj
 WORKDIR /work/backend
+USER dtuj
 RUN composer config -g process-timeout 3600 && \
   composer config -g repos.packagist composer https://packagist.org
