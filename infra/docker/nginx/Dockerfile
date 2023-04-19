@@ -7,8 +7,8 @@ USER root
 ENV TZ=Asia/Tokyo
 
 RUN apk add --update-cache --no-cache --virtual .build-dependencies g++ && \
-    mkdir /work && \
-    chown nginx:root /work && \
+    mkdir -p /work/backend && \
+    chown -hR nginx:root /work && \
     chmod 500 /work
 
 # node command
@@ -20,5 +20,6 @@ COPY --from=node /opt /opt
 # nginx config file
 COPY ./infra/docker/nginx/*.conf.template /etc/nginx/templates/
 
-USER nginx
 WORKDIR /work/backend
+USER nginx
+
