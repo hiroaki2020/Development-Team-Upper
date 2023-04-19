@@ -34,7 +34,7 @@ RUN apt-get update && \
   delgroup sudo && \
   umask 0027 && \
   mkdir -p /work/backend /composer && \
-  chown dtuj:dtuj /var/run/php-fpm /composer /work /work/backend && \
+  chown -hR dtuj:dtuj /var/run/php-fpm /composer /work && \
   chmod 750 /var/run/php-fpm && \
   chmod 500 /work
 
