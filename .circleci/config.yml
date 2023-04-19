@@ -170,7 +170,7 @@ workflows:
           push-image: true
           region: $AWS_DEFAULT_REGION
           registry-id: AWS_ACCOUNT_ID
-          repo: dtuj_redis_staging
+          repo: dtuj_kvs_staging
           repo-scan-on-push: true
           set-repo-policy: false
           skip-when-tags-exist: false
@@ -202,13 +202,14 @@ workflows:
           tag: latest,$CIRCLE_BRANCH
           <<: *run_on_develop_branch
           #<<: *run_on_release_and_hotfix_branches
-      #- deploy_to_staging:
-       #   <<: *run_on_release_and_hotfix_branches
-        #  requires:
-         #   - push_php_image
-          #  - push_nginx_image
-           # - push_mysql_image
-           # - push_redis_image
+    #  - deploy_to_staging:
+     #     <<: *run_on_develop_branch
+          #<<: *run_on_release_and_hotfix_branches
+      #    requires:
+       #     - push_php_image
+        #    - push_nginx_image
+         #   - push_mysql_image
+          #  - push_redis_image
            # - push_xtrabackup_image
   #production:
    # jobs:
@@ -510,5 +511,7 @@ jobs:
         #  command: |
          #   aws cloudformation deploy \
           #  --template-file dtuj-cloudformation-stack.yaml \
-           # --stack-name DTUJ-Staging
-
+          #  --stack-name DTUJ-Staging \
+          #  --parameter-overrides \
+          #  A=B \
+          #  --capabilities CAPABILITY_NAMED_IAM
