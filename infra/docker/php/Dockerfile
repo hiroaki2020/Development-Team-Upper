@@ -42,6 +42,6 @@ COPY ./infra/docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.
 COPY ./infra/docker/php/php.ini /usr/local/etc/php/php.ini
 
 WORKDIR /work/backend
-#USER dtuj
+USER dtuj
 RUN composer config -g process-timeout 3600 && \
   composer config -g repos.packagist composer https://packagist.org
