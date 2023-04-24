@@ -15,8 +15,7 @@ return [
     |
     */
 
-    #'default' => env('CACHE_DRIVER', 'redis'),
-    'default' => env('CACHE_DRIVER', 'database'),
+    'default' => env('CACHE_DRIVER', 'redis'),
 
     /*
     |--------------------------------------------------------------------------
@@ -46,8 +45,8 @@ return [
         'database' => [
             'driver' => 'database',
             'table' => 'cache',
-            'connection' => 'mysql',
-            'lock_connection' => 'mysql',
+            'connection' => null,
+            'lock_connection' => null,
         ],
 
         'file' => [
