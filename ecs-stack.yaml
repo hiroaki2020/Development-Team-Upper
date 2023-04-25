@@ -1,0 +1,1237 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  BaseCfnStackName:
+    Type: String
+    Description: Base cfn template stack name
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9]*$"
+    Default: "base-stack"
+  ClusterName:
+    Description: ECS cluster name.
+    Type: String
+    Default: "dtuj-cluster"
+  DesiredCapacity:
+    Type: Number
+    Default: '1'
+    Description: Number of containers to launch in your ECS cluster.
+  MaxSize:
+    Type: Number
+    Default: '1'
+    Description: Maximum number of containers that can be launched in your ECS cluster.
+  MinSize:
+    Type: Number
+    Default: '1'
+    Description: Minimum number of containers that can be launched in your ECS cluster.
+  HostedZoneName:
+    Type: String
+    Description: Hosted zone name
+    Default: "hosted-zone-name"
+  DomainName:
+    Type: String
+    Description: Domain name to access my app.
+    Default: "domain-name"
+Resources:
+  ALBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId: 
+        Fn::ImportValue: !Sub "${BaseCfnStackName}-VpcID"
+  ALBSecurityGroupHTTPInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: '{{resolve:secretsmanager:MyGlobalIp:SecretString:IP}}'
+  ALBSecurityGroupHTTPSInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: '{{resolve:secretsmanager:MyGlobalIp:SecretString:IP}}'
+  ALBSecurityGroupOutboundRule1:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      DestinationSecurityGroupId: !Ref WebServerSecurityGroup
+  ALB:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - ALB
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '30'
+      Subnets:
+        - 
+          Fn::ImportValue: !Sub "${BaseCfnStackName}-PublicSubnet1ID"
+        -
+          Fn::ImportValue: !Sub "${BaseCfnStackName}-PublicSubnet2ID"
+        -
+          Fn::ImportValue: !Sub "${BaseCfnStackName}-PublicSubnet3ID"
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+  ALBHttpListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            StatusCode: 'HTTP_301'
+            Port: '443'
+            Protocol: HTTPS
+      LoadBalancerArn: !Ref ALB
+      Port: '80'
+      Protocol: HTTP
+  ALBHttpsListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTG
+      LoadBalancerArn: !Ref ALB
+      Port: '443'
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: '{{resolve:secretsmanager:DTUJ-Staging-Secret:SecretString:CertificateArn}}'
+  ALBAliasDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Sub '${HostedZoneName}.'
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt 'ALB.DNSName'
+        HostedZoneId: !GetAtt 'ALB.CanonicalHostedZoneID'
+  ALBTG:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    DependsOn: ALB
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Name: ALBTG
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue: !Sub "${BaseCfnStackName}-VpcID"
+      TargetType: ip
+  ECSCluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      CapacityProviders:
+        - FARGATE
+      ClusterName: !Ref ClusterName
+      ServiceConnectDefaults:
+        Namespace: !Ref ClusterName
+  ECSLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Join 
+        - '-'
+        - - !Ref "AWS::StackName"
+          - ECSLogGroup
+      RetentionInDays: 14
+  TaskExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - TaskExecutionRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - TaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ecr:GetAuthorizationToken'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchGetImage'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - GetDtujStagingSecretPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM'
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - GetDtujStagingEnvFilePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                Resource: 'arn:aws:s3:::dtuj-private-bucket/env-files/.env'
+              - Effect: Allow
+                Action:
+                  - 's3:GetBucketLocation'
+                Resource: 'arn:aws:s3:::dtuj-private-bucket'
+  WebServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - !Ref "AWS::StackName"
+          - web-server-security-group
+      GroupDescription: Web Server Security Group
+      VpcId:
+        Fn::ImportValue: !Sub "${BaseCfnStackName}-VpcID"
+  WebServerSecurityGroupInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref WebServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
+  WebServerSecurityGroupOutboundRule1:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref WebServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+  WebServerSecurityGroupOutboundRule2:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref WebServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9000
+      ToPort: 9000
+      DestinationSecurityGroupId: !Ref AppServerSecurityGroup
+  WebServerTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - WebServerTaskRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*'
+      Path: /
+      Policies:
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - WebServerTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssmmessages:CreateControlChannel'
+                  - 'ssmmessages:CreateDataChannel'
+                  - 'ssmmessages:OpenControlChannel'
+                  - 'ssmmessages:OpenDataChannel'
+                Resource: '*'
+  WebServerTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    DependsOn: ECSLogGroup
+    Properties:
+      Family: !Join 
+        - '-'
+        - - !Ref "AWS::StackName"
+          - web-server
+      ContainerDefinitions:
+        - Name: web-server
+          Cpu: 100
+          Memory: 150
+          Essential: true
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/dtuj_web_staging:latest'
+          EnvironmentFiles:
+            - Value: "arn:aws:s3:::dtuj-private-bucket/env-files/.env"
+              Type: "s3"
+          Secrets:
+            - Name: APP_KEY
+              ValueFrom:
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:APP_KEY::"
+            - Name: DB_HOST_READ
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_HOST_READ::"
+            - Name: DB_HOST_WRITE
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_HOST_WRITE::"
+            - Name: DB_PORT
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_PORT::"
+            - Name: DB_DATABASE
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_DATABASE::"
+            - Name: DB_USERNAME
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_USERNAME::"
+            - Name: DB_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_PASSWORD::"
+            - Name: REDIS_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PASSWORD::"
+            - Name: REDIS_PORT
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PORT::"
+            - Name: AWS_ACCESS_KEY_ID
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_ACCESS_KEY_ID::"
+            - Name: AWS_SECRET_ACCESS_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_SECRET_ACCESS_KEY::"
+            - Name: AWS_DEFAULT_REGION
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_DEFAULT_REGION::"
+            - Name: AWS_BUCKET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_BUCKET::"
+            - Name: AWS_PUBLIC_BUCKET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_PUBLIC_BUCKET::"
+            - Name: PUSHER_APP_ID
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_ID::"
+            - Name: PUSHER_APP_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_KEY::"
+            - Name: PUSHER_APP_SECRET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_SECRET::"
+            - Name: PUSHER_APP_CLUSTER
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_CLUSTER::"
+            - Name: MIX_PUSHER_APP_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:MIX_PUSHER_APP_KEY::"
+            - Name: MIX_PUSHER_APP_CLUSTER
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:MIX_PUSHER_APP_CLUSTER::"
+            - Name: ADMIN_EMAIL
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:ADMIN_EMAIL::"
+            - Name: ADMIN_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:ADMIN_PASSWORD::"
+            - Name: LOG_REQUESTS
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:LOG_REQUESTS::"
+          Environment:
+            - Name: NGINX_PORT
+              Value: "80"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: web-server-service
+          PortMappings:
+            - ContainerPort: 80
+              Name: web-server
+              Protocol: tcp
+              AppProtocol: http
+          LinuxParameters:
+            InitProcessEnabled: "true"
+      TaskRoleArn: !GetAtt WebServerTaskRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      NetworkMode: awsvpc
+      Cpu: 256
+      Memory: 512
+      RequiresCompatibilities:
+        - FARGATE  
+  WebServerService:
+    Type: 'AWS::ECS::Service'
+    DependsOn:
+      - AppServerService
+      - ALBHttpListener
+      - ALBHttpsListener
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      LoadBalancers:
+        - ContainerName: web-server
+          ContainerPort: 80
+          TargetGroupArn: !Ref ALBTG
+      TaskDefinition: !Ref WebServerTaskDefinition
+      ServiceName: web-server
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref WebServerSecurityGroup
+          Subnets:
+            - 
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet1ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet2ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet3ID"
+      ServiceConnectConfiguration:
+        Enabled: "true"
+        Namespace: !Ref ClusterName
+        LogConfiguration:
+          LogDriver: "awslogs"
+          Options:
+            awslogs-group: !Ref ECSLogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: web-server-service
+  AppServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - !Ref "AWS::StackName"
+          - app-server-security-group
+      GroupDescription: App Server Security Group
+      VpcId:
+        Fn::ImportValue: !Sub "${BaseCfnStackName}-VpcID"
+  AppServerSecurityGroupInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9000
+      ToPort: 9000
+      SourceSecurityGroupId: !Ref WebServerSecurityGroup
+  AppServerSecurityGroupOutboundRule1:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+  AppServerSecurityGroupOutboundRule2:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      DestinationSecurityGroupId: !Ref DBServerSecurityGroup
+  AppServerSecurityGroupOutboundRule3:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      DestinationSecurityGroupId: !Ref KVSSecurityGroup
+  AppServerTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - AppServerTaskRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*'
+      Path: /
+      Policies:
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - AppServerTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssmmessages:CreateControlChannel'
+                  - 'ssmmessages:CreateDataChannel'
+                  - 'ssmmessages:OpenControlChannel'
+                  - 'ssmmessages:OpenDataChannel'
+                Resource: '*'
+  AppServerTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    DependsOn: ECSLogGroup
+    Properties:
+      Family: !Join 
+        - '-'
+        - - !Ref "AWS::StackName"
+          - app-server
+      ContainerDefinitions:
+        - Name: app-server
+          Cpu: 500
+          Memory: 1000
+          Essential: true
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/dtuj_app_staging:latest'
+          EntryPoint:
+            - 'sh'
+            - '-c'
+          Command:
+            - "composer install --optimize-autoloader --no-dev --no-scripts --no-plugins && \
+              while true; do echo 'lalala'; sleep 60; done"
+          EnvironmentFiles:
+            - Value: "arn:aws:s3:::dtuj-private-bucket/env-files/.env"
+              Type: "s3"
+          Secrets:
+            - Name: APP_KEY
+              ValueFrom:
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:APP_KEY::"
+            - Name: DB_HOST_READ
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_HOST_READ::"
+            - Name: DB_HOST_WRITE
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_HOST_WRITE::"
+            - Name: DB_PORT
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_PORT::"
+            - Name: DB_DATABASE
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_DATABASE::"
+            - Name: DB_USERNAME
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_USERNAME::"
+            - Name: DB_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_PASSWORD::"
+            - Name: DB_ROOT_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_ROOT_PASSWORD::"
+            - Name: REDIS_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PASSWORD::"
+            - Name: REDIS_PORT
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PORT::"
+            - Name: AWS_ACCESS_KEY_ID
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_ACCESS_KEY_ID::"
+            - Name: AWS_SECRET_ACCESS_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_SECRET_ACCESS_KEY::"
+            - Name: AWS_DEFAULT_REGION
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_DEFAULT_REGION::"
+            - Name: AWS_BUCKET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_BUCKET::"
+            - Name: AWS_PUBLIC_BUCKET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_PUBLIC_BUCKET::"
+            - Name: PUSHER_APP_ID
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_ID::"
+            - Name: PUSHER_APP_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_KEY::"
+            - Name: PUSHER_APP_SECRET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_SECRET::"
+            - Name: PUSHER_APP_CLUSTER
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_CLUSTER::"
+            - Name: MIX_PUSHER_APP_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:MIX_PUSHER_APP_KEY::"
+            - Name: MIX_PUSHER_APP_CLUSTER
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:MIX_PUSHER_APP_CLUSTER::"
+            - Name: ADMIN_EMAIL
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:ADMIN_EMAIL::"
+            - Name: ADMIN_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:ADMIN_PASSWORD::"
+            - Name: LOG_REQUESTS
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:LOG_REQUESTS::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: app-server-service
+          PortMappings:
+            - ContainerPort: 9000
+              Name: app-server
+              Protocol: tcp
+              AppProtocol: http
+          LinuxParameters:
+            InitProcessEnabled: true
+      TaskRoleArn: !GetAtt AppServerTaskRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      NetworkMode: awsvpc
+      Cpu: 1024
+      Memory: 2048
+      RequiresCompatibilities:
+        - FARGATE
+  AppServerService:
+    Type: 'AWS::ECS::Service'
+    DependsOn:
+      - ECSLogGroup
+      - DBServerService
+      - KVSService
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      TaskDefinition: !Ref AppServerTaskDefinition
+      ServiceName: app-server
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref AppServerSecurityGroup
+          Subnets:
+            - 
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet1ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet2ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet3ID"
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ClusterName
+        Services:
+          - PortName: app-server
+            DiscoveryName: app-server
+            ClientAliases:
+              - DnsName: app
+                Port: 9000
+        LogConfiguration:
+          LogDriver: "awslogs"
+          Options:
+            awslogs-group: !Ref ECSLogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: app-server-service
+  AppQueueWorkerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - !Ref "AWS::StackName"
+          - app-queue-worker-security-group
+      GroupDescription: App Queue Worker Security Group
+      VpcId:
+        Fn::ImportValue: !Sub "${BaseCfnStackName}-VpcID"
+  AppQueueWorkerSecurityGroupInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9000
+      ToPort: 9000
+      SourceSecurityGroupId: !Ref WebServerSecurityGroup
+  AppQueueWorkerSecurityGroupOutboundRule1:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+  AppQueueWorkerSecurityGroupOutboundRule2:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      DestinationSecurityGroupId: !Ref DBServerSecurityGroup
+  AppQueueWorkerSecurityGroupOutboundRule3:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref AppServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      DestinationSecurityGroupId: !Ref KVSSecurityGroup
+  AppQueueWorkerTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - AppQueueWorkerTaskRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*'
+      Path: /
+      Policies:
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - AppQueueWorkerTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssmmessages:CreateControlChannel'
+                  - 'ssmmessages:CreateDataChannel'
+                  - 'ssmmessages:OpenControlChannel'
+                  - 'ssmmessages:OpenDataChannel'
+                Resource: '*'
+  AppQueueWorkerTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    DependsOn:
+      - ECSLogGroup
+      - KVSTaskDefinition
+      - KVSService
+    Properties:
+      Family: !Join 
+        - '-'
+        - - !Ref "AWS::StackName"
+          - app-queue-worker
+      ContainerDefinitions:
+        - Name: app-queue-worker
+          Cpu: 100
+          Memory: 200
+          Essential: true
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/dtuj_app_staging:latest'
+          EntryPoint:
+            - 'sh'
+            - '-c'
+          Command:
+            - 'composer install --optimize-autoloader --no-dev --no-scripts --no-plugins && php artisan config:cache && php artisan view:cache && php artisan route cache && php artisan queue:work --timeout=80 --max-time=3600'
+          EnvironmentFiles:
+            - Value: "arn:aws:s3:::dtuj-private-bucket/env-files/.env"
+              Type: "s3"
+          Secrets:
+            - Name: APP_KEY
+              ValueFrom:
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:APP_KEY::"
+            - Name: APP_URL
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:APP_URL::"
+            - Name: DB_HOST_READ
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_HOST_READ::"
+            - Name: DB_HOST_WRITE
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_HOST_WRITE::"
+            - Name: DB_PORT
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_PORT::"
+            - Name: DB_DATABASE
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_DATABASE::"
+            - Name: DB_USERNAME
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_USERNAME::"
+            - Name: DB_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_PASSWORD::"
+            - Name: REDIS_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PASSWORD::"
+            - Name: REDIS_PORT
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PORT::"
+            - Name: AWS_ACCESS_KEY_ID
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_ACCESS_KEY_ID::"
+            - Name: AWS_SECRET_ACCESS_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_SECRET_ACCESS_KEY::"
+            - Name: AWS_DEFAULT_REGION
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_DEFAULT_REGION::"
+            - Name: AWS_BUCKET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_BUCKET::"
+            - Name: AWS_PUBLIC_BUCKET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:AWS_PUBLIC_BUCKET::"
+            - Name: PUSHER_APP_ID
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_ID::"
+            - Name: PUSHER_APP_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_KEY::"
+            - Name: PUSHER_APP_SECRET
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_SECRET::"
+            - Name: PUSHER_APP_CLUSTER
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:PUSHER_APP_CLUSTER::"
+            - Name: MIX_PUSHER_APP_KEY
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:MIX_PUSHER_APP_KEY::"
+            - Name: MIX_PUSHER_APP_CLUSTER
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:MIX_PUSHER_APP_CLUSTER::"
+            - Name: ADMIN_EMAIL
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:ADMIN_EMAIL::"
+            - Name: ADMIN_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:ADMIN_PASSWORD::"
+            - Name: LOG_REQUESTS
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:LOG_REQUESTS::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: app-queue-worker-service
+          PortMappings:
+            - ContainerPort: 9000
+              Name: app-queue-worker
+              Protocol: tcp
+              AppProtocol: http
+          LinuxParameters:
+            InitProcessEnabled: true
+      TaskRoleArn: !GetAtt AppQueueWorkerTaskRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      NetworkMode: awsvpc
+      Cpu: 256
+      Memory: 512
+      RequiresCompatibilities:
+        - FARGATE
+  AppQueueWorkerService:
+    Type: 'AWS::ECS::Service'
+    DependsOn:
+      - ECSLogGroup
+      - DBServerService
+      - KVSService
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      TaskDefinition: !Ref AppQueueWorkerTaskDefinition
+      ServiceName: app-queue-worker
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref AppQueueWorkerSecurityGroup
+          Subnets:
+            - 
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet1ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet2ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet3ID"
+      ServiceConnectConfiguration:
+        Enabled: true
+        Services:
+          - PortName: app-queue-worker
+            DiscoveryName: app-queue-worker
+            ClientAliases:
+              - DnsName: app-queue-worker
+                Port: 9000
+        LogConfiguration:
+          LogDriver: "awslogs"
+          Options:
+            awslogs-group: !Ref ECSLogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: app-queue-worker-service
+  DBServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - !Ref "AWS::StackName"
+          - db-server-security-group
+      GroupDescription: DB Server Security Group
+      VpcId:
+        Fn::ImportValue: !Sub "${BaseCfnStackName}-VpcID"
+  DBServerSecurityGroupInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref DBServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref AppServerSecurityGroup
+  DBServerSecurityGroupOutboundRule1:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref DBServerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+  DBServerTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - DBServerTaskRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*'
+      Path: /
+      Policies:
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - DBServerTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssmmessages:CreateControlChannel'
+                  - 'ssmmessages:CreateDataChannel'
+                  - 'ssmmessages:OpenControlChannel'
+                  - 'ssmmessages:OpenDataChannel'
+                Resource: '*'
+  DBServerTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    DependsOn: ECSLogGroup
+    Properties:
+      Family: !Join 
+        - '-'
+        - - !Ref "AWS::StackName"
+          - db-server
+      ContainerDefinitions:
+        - Name: db-server
+          Cpu: 1000
+          Memory: 2000
+          Essential: true
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/dtuj_db_staging:latest'
+          EnvironmentFiles:
+            - Value: "arn:aws:s3:::dtuj-private-bucket/env-files/.env"
+              Type: "s3"
+          Secrets:
+            - Name: MYSQL_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_PASSWORD::"
+            - Name: MYSQL_USER
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_USERNAME::"
+            - Name: MYSQL_DATABASE
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_DATABASE::"
+            - Name: MYSQL_ROOT_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:DB_ROOT_PASSWORD::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: db-server-service
+          PortMappings:
+            - ContainerPort: 3306
+              Name: db-server
+              Protocol: tcp
+              AppProtocol: http
+          LinuxParameters:
+            InitProcessEnabled: true
+      TaskRoleArn: !GetAtt DBServerTaskRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      NetworkMode: awsvpc
+      Cpu: 2048
+      Memory: 4096
+      RequiresCompatibilities:
+        - FARGATE
+  DBServerService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      TaskDefinition: !Ref DBServerTaskDefinition
+      ServiceName: db-server
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref DBServerSecurityGroup
+          Subnets:
+            - 
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet1ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet2ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet3ID"
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ClusterName
+        Services:
+          - PortName: db-server
+            DiscoveryName: db-server
+            ClientAliases:
+              - DnsName: db
+                Port: 3306
+        LogConfiguration:
+          LogDriver: "awslogs"
+          Options:
+            awslogs-group: !Ref ECSLogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: db-server-service
+  KVSSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - !Ref "AWS::StackName"
+          - kvs-security-group
+      GroupDescription: KVS Security Group
+      VpcId:
+        Fn::ImportValue: !Sub "${BaseCfnStackName}-VpcID"
+  KVSSecurityGroupInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref KVSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref AppServerSecurityGroup
+  KVSSecurityGroupOutboundRule1:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref KVSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+  KVSTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - KVSTaskRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*'
+      Path: /
+      Policies:
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - KVSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssmmessages:CreateControlChannel'
+                  - 'ssmmessages:CreateDataChannel'
+                  - 'ssmmessages:OpenControlChannel'
+                  - 'ssmmessages:OpenDataChannel'
+                Resource: '*'
+  KVSTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: !Join 
+        - '-'
+        - - !Ref "AWS::StackName"
+          - kvs
+      ContainerDefinitions:
+        - Name: kvs
+          Cpu: 250
+          Memory: 500
+          Essential: true
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/dtuj_kvs_staging:latest'
+          Secrets:
+            - Name: REDIS_PASSWORD
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PASSWORD::"
+            - Name: REDISCLI_AUTH
+              ValueFrom: 
+                !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:DTUJ-Staging-Secret-JpQnZM:REDIS_PASSWORD::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: kvs-service
+          PortMappings:
+            - ContainerPort: 6379
+              Name: kvs
+              Protocol: tcp
+              AppProtocol: http
+          LinuxParameters:
+            InitProcessEnabled: true
+      TaskRoleArn: !GetAtt KVSTaskRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      NetworkMode: awsvpc
+      Cpu: 512
+      Memory: 1024
+      RequiresCompatibilities:
+        - FARGATE
+  KVSService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      TaskDefinition: !Ref KVSTaskDefinition
+      ServiceName: kvs
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref KVSSecurityGroup
+          Subnets:
+            - 
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet1ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet2ID"
+            -
+              Fn::ImportValue: !Sub "${BaseCfnStackName}-PrivateSubnet3ID"
+      ServiceConnectConfiguration:
+        Enabled: true
+        Services:
+          - PortName: kvs
+            DiscoveryName: kvs
+            ClientAliases:
+              - DnsName: kvs
+                Port: 6379
+        LogConfiguration:
+          LogDriver: "awslogs"
+          Options:
+            awslogs-group: !Ref ECSLogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: kvs-service
+  AutoscalingRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Join
+        - ''
+        - - !Ref "AWS::StackName"
+          - AutoscalingRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: !Join
+            - ''
+            - - !Ref "AWS::StackName"
+              - AutoscalingRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'application-autoscaling:*'
+                  - 'cloudwatch:DescribeAlarms'
+                  - 'cloudwatch:PutMetricAlarm'
+                  - 'ecs:DescribeServices'
+                  - 'ecs:UpdateService'
+                Resource: '*'
+  WebServerServiceScalingTarget:
+    Type: 'AWS::ApplicationAutoScaling::ScalableTarget'
+    DependsOn:
+      - WebServerService
+      - AutoscalingRole
+    Properties:
+      MaxCapacity: !Ref MaxSize
+      MinCapacity: !Ref MinSize
+      ResourceId: !Join 
+        - ''
+        - - service/
+          - !Ref ECSCluster
+          - /
+          - !GetAtt 
+            - WebServerService
+            - Name
+      RoleARN: !GetAtt 
+        - AutoscalingRole
+        - Arn
+      ScalableDimension: 'ecs:service:DesiredCount'
+      ServiceNamespace: ecs
+  WebServerServiceCPUTrackingScalingPolicy:
+    Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
+    DependsOn:
+      - WebServerServiceScalingTarget
+    Properties:
+      PolicyName: WebServerServiceCPUTrackingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref WebServerServiceScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 80
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 300
